@@ -2,10 +2,14 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 from LineaX_Classes import InputData
+from AnalysisMethod import *
+from ScreenManager import ScreenManager
+
 
 class DataInputScreen(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, manager):
         super().__init__(parent, bg="#f5f6f8")
+        self.manager = manager
         self.parent = parent
         self.df = None
         self.configure(padx=20, pady=15)
@@ -83,7 +87,8 @@ class DataInputScreen(tk.Frame):
 
     def create_import_panel(self, parent):
         """Create left panel for CSV/Excel import"""
-        left_panel = tk.Frame(parent, bg="white", padx=20, pady=20)
+        self.import_panel = tk.Frame(parent, bg="white", padx=20, pady=20)
+        left_panel = self.import_panel
         left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
         # Title
@@ -157,7 +162,7 @@ class DataInputScreen(tk.Frame):
         self.remove_file_btn = tk.Button(
             drop_content,
             text="✕",
-            font=("Segoe UI", 8, "bold"),
+            font=("Segoe UI", 10, "bold"),
             fg="#ef4444",
             bg="#f8fafc",
             relief="flat",
@@ -241,10 +246,10 @@ class DataInputScreen(tk.Frame):
             bg="white"
         ).pack(anchor="w", pady=(8, 0))
 
-    def disable_manual_entry(self):
-        for row in self.entries:
-            for entry in row:
-                entry.config(state="disabled")
+    # def disable_manual_entry(self):
+    #     for row in self.entries:
+    #         for entry in row:
+    #             entry.config(state="disabled")
 
     def select_file(self):
         path = filedialog.askopenfilename(
@@ -295,7 +300,7 @@ class DataInputScreen(tk.Frame):
             self.parent.update()
 
             # Disable manual entry ONLY on success
-            self.disable_manual_entry()
+            self.set_panel_state(self.manual_panel, enabled=False)
             self.remove_file_btn.place(relx=1, rely=0, anchor="ne")
 
         except Exception as e:
@@ -338,7 +343,9 @@ class DataInputScreen(tk.Frame):
 
     def create_manual_panel(self, parent):
         """Create right panel for manual data entry"""
-        right_panel = tk.Frame(parent, bg="white", padx=20, pady=20)
+        self.manual_panel = tk.Frame(parent, bg="white", padx=20, pady=20)
+        right_panel = self.manual_panel
+
         right_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
         # Title
@@ -452,6 +459,10 @@ class DataInputScreen(tk.Frame):
 
     def validate_entry(self, entry_widget):
         """Provide visual feedback for entry validation"""
+        if self.df is None and entry_widget.get().strip():
+            self.set_panel_state(self.import_panel, enabled=False)
+
+
 
         if self.df is not None:
             entry_widget.delete(0, tk.END)
@@ -551,7 +562,7 @@ class DataInputScreen(tk.Frame):
 
             messagebox.showinfo("Success", "File data validated! Proceeding to analysis...")
             # Here you would transition to the next screen
-            return
+            self.manager.show(AnalysisMethodScreen)
 
         # Check manual entry
         manual_data = self.get_manual_data()
@@ -614,6 +625,8 @@ class DataInputScreen(tk.Frame):
             entry.insert(0, text)
 
         messagebox.showinfo("Reset Complete", "All inputs have been cleared.")
+        self.set_panel_state(self.import_panel, enabled=True)
+        self.df = None
 
     def remove_imported_file(self):
         self.df = None
@@ -640,6 +653,30 @@ class DataInputScreen(tk.Frame):
                 entry.config(state="normal")
 
         messagebox.showinfo("File Removed", "Imported file has been removed.")
+        self.set_panel_state(self.manual_panel, enabled=True)
+        self.df = None
+
+    def set_panel_state(self, panel, enabled: bool):
+        bg_colour = "white" if enabled else "#e5e7eb"
+        text_colour = "#0f172a" if enabled else "#9ca3af"
+
+        panel.config(bg=bg_colour)
+
+        for widget in panel.winfo_children():
+            self._update_widget_state(widget, enabled, bg_colour, text_colour)
+
+    def _update_widget_state(self, widget, enabled, bg, fg):
+        try:
+            widget.config(
+                state="normal" if enabled else "disabled",
+                bg=bg,
+                fg=fg
+            )
+        except tk.TclError:
+            pass
+
+        for child in widget.winfo_children():
+            self._update_widget_state(child, enabled, bg, fg)
 
 
 if __name__ == "__main__":
@@ -654,8 +691,11 @@ if __name__ == "__main__":
     y = (root.winfo_screenheight() // 2) - (700 // 2)
     root.geometry(f"1100x700+{x}+{y}")
 
-    app = DataInputScreen(root)
-    app.pack(fill="both", expand=True)
+    # app = DataInputScreen(root)
+    # app.pack(fill="both", expand=True)
+
+    manager = ScreenManager(root)
+    manager.show(DataInputScreen)
 
     root.mainloop()
 
