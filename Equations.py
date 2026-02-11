@@ -48,6 +48,11 @@ class EquationLibrary:
                 expression="v = f λ",
                 variables={"v": "Wave speed", "f": "Frequency", "λ": "Wavelength"}
             ),
+            Equation(
+                name= "Magnetic Field",
+                expression= "F = B Q v",
+                variables= {"F": "Force","B": "Magnetic flux density", "Q": "Charge", "v": "Velocity"}
+            ),
         ]
 
     def _build_index(self):
