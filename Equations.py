@@ -75,3 +75,5 @@ class EquationLibrary:
             if token in self._index:
                 matched = self._index[token] if not matched else matched & self._index[token]
         return [self._equations[i] for i in matched]
+
+

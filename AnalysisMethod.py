@@ -3,10 +3,6 @@ from tkinter import ttk
 from Equations import *
 
 
-
-
-
-
 class AnalysisMethodScreen(tk.Frame):
     def __init__(self, parent, manager):
         super().__init__(parent, bg="#f5f6f8", padx=20, pady=20)
@@ -71,18 +67,43 @@ class AnalysisMethodScreen(tk.Frame):
         self.results_box.pack(fill="x", pady=(5, 10))
         self.results_box.bind("<<ListboxSelect>>", self._select_equation)
 
-        self.equation_display = tk.Label(panel, text="", bg="#f8fafc", height=3, relief="solid")
+        self.equation_display = tk.Label(
+            panel,
+            text="",
+            bg="#f8fafc",
+            height=3,
+            relief="solid"
+        )
         self.equation_display.pack(fill="x", pady=10)
+
+        tk.Label(panel, text="Select Variables", bg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w",
+                                                                                                 pady=(10, 5))
 
         tk.Label(panel, text="X Variable", bg="white").pack(anchor="w")
         self.x_var = ttk.Combobox(panel, state="readonly")
-        self.x_var.pack(fill="x", pady=(0, 10))
+        self.x_var.pack(fill="x", pady=(0, 8))
 
         tk.Label(panel, text="Y Variable", bg="white").pack(anchor="w")
         self.y_var = ttk.Combobox(panel, state="readonly")
-        self.y_var.pack(fill="x")
+        self.y_var.pack(fill="x", pady=(0, 8))
+
+        tk.Label(panel, text="Value to Find (optional)", bg="white").pack(anchor="w")
+        self.find_var = ttk.Combobox(panel, state="readonly")
+        self.find_var.pack(fill="x", pady=(0, 12))
+
 
         tk.Button(panel, text="Generate Linear Graph", bg="#0f172a", fg="white").pack(side="bottom", fill="x", pady=(25, 0))
+
+        self.constants_frame = tk.LabelFrame(
+            panel,
+            text="Constant Values",
+            bg="white",
+            padx=10,
+            pady=10
+        )
+        self.constants_frame.pack(fill="x", pady=10)
+
+        self.constant_entries = {}
 
     def create_automated_panel(self, parent):
         panel = tk.Frame(parent, bg="white", padx=20, pady=20)
@@ -105,18 +126,126 @@ class AnalysisMethodScreen(tk.Frame):
         for eq in results:
             self.results_box.insert(tk.END, f"{eq.name}             {eq.expression}")
 
+
+
     def _select_equation(self, event):
         if not self.results_box.curselection():
             return
+
         index = self.results_box.curselection()[0]
-        name = self.results_box.get(index)
+        display_text = self.results_box.get(index)
+        name = display_text.split()[0]
+
         for eq in self.library.search(name):
             self.selected_equation = eq
             break
+
         self.equation_display.config(text=self.selected_equation.expression)
+
         vars_list = list(self.selected_equation.variables.keys())
+
         self.x_var.config(values=vars_list)
         self.y_var.config(values=vars_list)
+        self.find_var.config(values=["None"] + vars_list)
+        self.find_var.set("None")
+
+        self.x_var.bind("<<ComboboxSelected>>", self._on_variable_change)
+        self.y_var.bind("<<ComboboxSelected>>", self._on_variable_change)
+        self.find_var.bind("<<ComboboxSelected>>", self._on_variable_change)
+
+        self.find_var.set("None")
+        self._enforce_variable_rules()
+        self._update_constants()
+
+
+    def _update_constants(self, event=None):
+        for widget in self.constants_frame.winfo_children():
+            widget.destroy()
+
+        if not self.selected_equation:
+            return
+
+        x = self.x_var.get()
+        y = self.y_var.get()
+        f = self.find_var.get()
+
+        chosen = {x, y}
+        if f and f != "None":
+            chosen.add(f)
+
+        remaining = [
+            v for v in self.selected_equation.variables.keys()
+            if v not in chosen
+        ]
+
+        self.constant_entries.clear()
+
+        for var in remaining:
+            row = tk.Frame(self.constants_frame, bg="white")
+            row.pack(fill="x", pady=3)
+
+            tk.Label(
+                row,
+                text=f"{var} =",
+                width=6,
+                anchor="w",
+                bg="white"
+            ).pack(side="left")
+
+            entry = tk.Entry(row)
+            entry.pack(side="left", fill="x", expand=True)
+
+            default = self._default_constant(var)
+            if default is not None:
+                entry.insert(0, str(default))
+
+            self.constant_entries[var] = entry
+
+    def _default_constant(self, symbol):
+        constants = {
+            "h": 6.626e-34,
+            "c": 3.0e8,
+            "R": 8.314,
+            "g": 9.81,
+            "n": 1
+        }
+        return constants.get(symbol)
+
+    def _on_variable_change(self, event=None):
+        self._enforce_variable_rules()
+        self._update_constants()
+
+    def _enforce_variable_rules(self):
+        if not self.selected_equation:
+            return
+
+        all_vars = list(self.selected_equation.variables.keys())
+
+        x = self.x_var.get()
+        y = self.y_var.get()
+        f = self.find_var.get()
+
+        # X and Y must be different
+        if x and x == y:
+            self.y_var.set("")
+
+        # Rebuild Y options excluding X
+        y_options = [v for v in all_vars if v != x]
+        self.y_var.config(values=y_options)
+
+        # Rebuild X options excluding Y
+        x_options = [v for v in all_vars if v != y]
+        self.x_var.config(values=x_options)
+
+        # Find cannot clash with X or Y
+        find_options = ["None"] + [
+            v for v in all_vars
+            if v != x and v != y
+        ]
+        self.find_var.config(values=find_options)
+
+        if f in (x, y):
+            self.find_var.set("None")
 
     def _clear_placeholder(self, event):
         if self.search_entry.get() == self.search_placeholder:
