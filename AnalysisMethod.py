@@ -1,6 +1,19 @@
 import tkinter as tk
 from tkinter import ttk
 from Equations import *
+import sympy as sp
+from sympy.parsing.sympy_parser import (
+    parse_expr,
+    standard_transformations,
+    implicit_multiplication_application
+)
+
+
+
+TRANSFORMS = standard_transformations + (
+    implicit_multiplication_application,
+)
+
 
 
 class AnalysisMethodScreen(tk.Frame):
@@ -105,6 +118,28 @@ class AnalysisMethodScreen(tk.Frame):
 
         self.constant_entries = {}
 
+        tk.Button(
+            panel,
+            text="Linearise Equation",
+            bg="#0f172a",
+            fg="white",
+            command=self._linearise_equation
+        ).pack(fill="x", pady=(15, 8))
+
+        self.linearised_display = tk.Label(
+            panel,
+            text="",
+            bg="#f8fafc",
+            fg="#0f172a",
+            relief="solid",
+            justify="left",
+            anchor="w",
+            padx=10,
+            pady=8
+        )
+        self.linearised_display.pack(fill="x", pady=(0, 15))
+        self.linearised_display.pack_forget()
+
     def create_automated_panel(self, parent):
         panel = tk.Frame(parent, bg="white", padx=20, pady=20)
         panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
@@ -203,11 +238,12 @@ class AnalysisMethodScreen(tk.Frame):
 
     def _default_constant(self, symbol):
         constants = {
-            "h": 6.626e-34,
+            "h": 6.63e-34,
             "c": 3.0e8,
-            "R": 8.314,
+            "e": 1.6e-19,
+            "R": 8.31,
             "g": 9.81,
-            "n": 1
+            "N": 6.02e23,
         }
         return constants.get(symbol)
 
@@ -247,6 +283,144 @@ class AnalysisMethodScreen(tk.Frame):
         if f in (x, y):
             self.find_var.set("None")
 
+    def _linearise_equation(self):
+        if not self.selected_equation:
+            return
+
+        x_sym = self.x_var.get()
+        y_sym = self.y_var.get()
+        find_sym = self.find_var.get()
+
+        if not x_sym or not y_sym:
+            tk.messagebox.showwarning(
+                "Invalid Selection",
+                "Please select distinct X and Y variables."
+            )
+            return
+
+        # Parse the equation string into SymPy
+        lhs_str, rhs_str = self.selected_equation.expression.split("=")
+
+        lhs = parse_expr(lhs_str.strip(), transformations=TRANSFORMS)
+        rhs = parse_expr(rhs_str.strip(), transformations=TRANSFORMS)
+
+        equation = sp.Eq(lhs, rhs)
+
+        # Build symbol map
+        sympy_x, sympy_y = sp.symbols("x y")
+
+        symbol_map = {
+            sp.Symbol(x_sym): sympy_x,
+            sp.Symbol(y_sym): sympy_y
+        }
+
+        # Substitute constants
+        for var, entry in self.constant_entries.items():
+            try:
+                value = float(entry.get())
+            except ValueError:
+                tk.messagebox.showerror(
+                    "Invalid Constant",
+                    f"Constant {var} must be numeric."
+                )
+                return
+
+            symbol_map[sp.Symbol(var)] = value
+
+        # Apply mapping to equation
+        mapped_eq = equation.subs(symbol_map)
+
+        # Linearise using your existing function
+        linearised = self.linearise(mapped_eq)
+
+        # Reverse substitution back to scientific symbols
+        reverse_map = {
+            sympy_x: sp.Symbol(x_sym),
+            sympy_y: sp.Symbol(y_sym)
+        }
+
+        final_eq = linearised.subs(reverse_map)
+
+        # Display result
+        self.linearised_display.config(
+            text=f"Linearised form:\n{sp.pretty(final_eq)}"
+        )
+        self.linearised_display.pack(fill="x", pady=(0, 15))
+
+    @staticmethod
+    def linearise(equation):
+        x, y = sp.symbols("x y")
+
+        """
+        Linearise common non-linear functions for straight-line graphs.
+
+        Supported transformations:
+        - Exponential: y = a*exp(b*x) + c -> ln(y - c) = ln(a) + b*x
+        - Reciprocal: y = a/x + c -> remains y = a/x + c (already linear in 1/x)
+        - Power/Polynomial: y = a*x^n + c -> remains unchanged (linear in x^n)
+
+        Accepts equations in the form of SymPy Eq objects or expressions (assumes = 0).
+        Handles cases where y is not isolated, such as:
+        - 2*y = x^2 + 3
+        - y^2 = x + c
+        - a*y^n = b*x^m + c
+
+        All other forms are kept unchanged as they're already
+        linear in the transformed variables.
+        """
+
+        # Convert to equation if just an expression is passed
+        if not isinstance(equation, sp.Eq):
+            expr = equation
+            # Try to determine if it's meant to be y = expr or expr = 0
+            if y in expr.free_symbols:
+                # Check if it's already solved for y
+                if expr.is_Add or expr.is_Mul or expr.is_Pow:
+                    equation = sp.Eq(y, expr)
+                else:
+                    equation = sp.Eq(expr, 0)
+            else:
+                # No y in expression, treat as y = expr
+                equation = sp.Eq(y, expr)
+
+        lhs = equation.lhs
+        rhs = equation.rhs
+
+        # Determine which side contains y and which contains the main expression
+        if y in lhs.free_symbols and y not in rhs.free_symbols:
+            y_side = lhs
+            expr_side = rhs
+        elif y in rhs.free_symbols and y not in lhs.free_symbols:
+            # Swap to keep y on left
+            y_side = rhs
+            expr_side = lhs
+        else:
+            # Both sides have y or neither side has y, return unchanged
+            return equation
+
+        # Check if the expression side (without y) has exponential
+        if expr_side.has(sp.exp):
+            c, rest = expr_side.as_coeff_Add()
+            if rest.has(sp.exp):
+                coeff, exp_term = rest.as_coeff_Mul()
+                if isinstance(exp_term, sp.exp):
+                    b = exp_term.args[0]
+                else:
+                    b = 1
+                # Apply transformation: ln(y_side - c) = ln(coeff) + b
+                return sp.Eq(sp.log(y_side - c), sp.log(coeff) + b)
+            else:
+                return sp.Eq(y_side, expr_side)
+
+        # Check for reciprocal in expression side
+        if expr_side.has(1 / x):
+            return sp.Eq(y_side, expr_side)
+
+        # All other cases (power, polynomial, linear, or y^n forms) -> keep unchanged
+        # This includes: y = x^n, 2*y = x^2, y^2 = x + c, etc.
+        return sp.Eq(y_side, expr_side)
+
+
     def _clear_placeholder(self, event):
         if self.search_entry.get() == self.search_placeholder:
             self.search_entry.delete(0, tk.END)
@@ -262,9 +436,9 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1000x600")
     root.title("LineaX – Analysis Method")
-    # AnalysisMethodScreen(root).pack(fill="both", expand=True)
-    class DummyManager:
-        def show(self, *_): pass
-        def back(self): pass
-    AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
+    AnalysisMethodScreen(root).pack(fill="both", expand=True)
+    # class DummyManager:
+    #     def show(self, *_): pass
+    #     def back(self): pass
+    # AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
     root.mainloop()
