@@ -436,9 +436,9 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1000x600")
     root.title("LineaX – Analysis Method")
-    AnalysisMethodScreen(root).pack(fill="both", expand=True)
-    # class DummyManager:
-    #     def show(self, *_): pass
-    #     def back(self): pass
-    # AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
+    # AnalysisMethodScreen(root).pack(fill="both", expand=True)
+    class DummyManager:
+        def show(self, *_): pass
+        def back(self): pass
+    AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
     root.mainloop()
