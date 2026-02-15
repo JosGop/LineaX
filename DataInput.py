@@ -47,6 +47,7 @@ class DataInputScreen(tk.Frame):
         inner.pack(fill="both", expand=True)
 
         # Configure grid layout for two equal columns
+        inner.grid_rowconfigure(0, weight=1)
         inner.grid_columnconfigure(0, weight=1)
         inner.grid_columnconfigure(1, weight=1)
 
@@ -87,9 +88,15 @@ class DataInputScreen(tk.Frame):
 
     def create_import_panel(self, parent):
         """Create left panel for CSV/Excel import"""
-        self.import_panel = tk.Frame(parent, bg="white", padx=20, pady=20)
+        self.import_panel_container, self.import_panel, _, _ = make_scrollable(
+            parent,
+            row=0,
+            column=0,
+            padx=(0, 10),
+            bg="white",
+            panel_kwargs={"padx": 20, "pady": 20},
+        )
         left_panel = self.import_panel
-        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
         # Title
         tk.Label(
@@ -358,10 +365,15 @@ class DataInputScreen(tk.Frame):
 
     def create_manual_panel(self, parent):
         """Create right panel for manual data entry"""
-        self.manual_panel = tk.Frame(parent, bg="white", padx=20, pady=20)
+        self.manual_panel_container, self.manual_panel, _, _ = make_scrollable(
+            parent,
+            row=0,
+            column=1,
+            padx=(10, 0),
+            bg="white",
+            panel_kwargs={"padx": 20, "pady": 20},
+        )
         right_panel = self.manual_panel
-
-        right_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
         # Title
         tk.Label(

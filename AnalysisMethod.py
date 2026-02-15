@@ -65,41 +65,14 @@ class AnalysisMethodScreen(tk.Frame):
         self.create_automated_panel(inner)
 
     def create_linear_panel(self, parent):
-        # Create a frame with scrollbar
-        panel_container = tk.Frame(parent, bg="white")
-        panel_container.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-
-        # Create canvas and scrollbar
-        canvas = tk.Canvas(panel_container, bg="white", highlightthickness=0)
-        scrollbar = tk.Scrollbar(panel_container, orient="vertical", command=canvas.yview)
-
-        # Create the actual panel inside canvas
-        panel = tk.Frame(canvas, bg="white", padx=20, pady=20)
-
-        # Configure scrolling
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Pack scrollbar and canvas
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        # Create window in canvas
-        canvas_frame = canvas.create_window((0, 0), window=panel, anchor="nw")
-
-        # Update scroll region when panel size changes
-        def on_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            # Also update the window width to match canvas
-            canvas.itemconfig(canvas_frame, width=event.width)
-
-        panel.bind("<Configure>", on_configure)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_frame, width=e.width))
-
-        # Mouse wheel scrolling
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        canvas.bind_all("<MouseWheel>", on_mousewheel)
+        _, panel, _, _ = ManagingScreen.make_scrollable(
+            parent,
+            row=0,
+            column=0,
+            padx=(0, 10),
+            bg="white",
+            panel_kwargs={"padx": 20, "pady": 20},
+        )
 
         tk.Label(panel, text="Linear Graph Analysis", font=("Segoe UI", 14, "bold"), bg="white").pack(anchor="w",
                                                                                                       pady=(0, 15))
