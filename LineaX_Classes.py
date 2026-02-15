@@ -41,39 +41,84 @@ class InputData:
         self.x_title = x_title
         self.y_title = y_title
 
-    def validate_input(self) -> bool:
-        pass
-
-    def read_csv_file(self, filepath, x_col: int, y_col: int, x_err_col: None, y_err_col: None):
-        pass
 
     def read_excel(self, filepath, x: int, y: int, x_err_col: None, y_err_col: None):
-        pass
+        # read the Excel file into a DataFrame
+        df = pd.read_excel(filepath)
 
-    # def load_from_dataframe(
-    #     self,
-    #     df,
-    #     x_col: str,
-    #     y_col: str,
-    #     x_err_col: Optional[str] = None,
-    #     y_err_col: Optional[str] = None
-    # ):
-    #     self.x_values = df[x_col].astype(float).tolist()
-    #     self.y_values = df[y_col].astype(float).tolist()
-    #
-    #     self.x_error = (
-    #         df[x_err_col].astype(float).tolist()
-    #         if x_err_col and x_err_col != "None"
-    #         else None
-    #     )
-    #
-    #     self.y_error = (
-    #         df[y_err_col].astype(float).tolist()
-    #         if y_err_col and y_err_col != "None"
-    #         else None
-    #     )
-    #
-    #     return self.validate_input()
+        # extract values from the chosen x column (1-based index)
+        # convert each value to int if it is already an int, otherwise to float
+        x_data = [int(val) if isinstance(val, int) else float(val) for val in df.iloc[:, x - 1]]
+
+        # extract values from the chosen y column (1-based index)
+        # same conversion logic as for x values
+        y_data = [int(val) if isinstance(val, int) else float(val) for val in df.iloc[:, y - 1]]
+
+        # get the column titles (names of x and y columns)
+        x_title, y_title = df.columns
+
+        self.x_values = x_data
+        self.y_values = y_data
+        self.x_error = find_error(x_data, x_err_col)
+        self.y_error = find_error(y_data, y_err_col)
+        self.x_title = x_title
+        self.y_title = y_title
+
+    def read_csv_file(self, filepath, x_col: int, y_col: int, x_err_col: None, y_err_col: None):
+        # create empty lists to store x and y values
+        x_data = []
+        y_data = []
+
+        # open the CSV file in read mode
+        # newline='' prevents issues with line breaks across operating systems
+        with open(filepath, newline='') as file:
+            reader = csv.reader(file)  # turn the file into a CSV reader object
+
+            # read header row to get column titles
+            header = next(reader, None)
+            x_title = header[x_col - 1]  # title of x column
+            y_title = header[y_col - 1]  # title of y column
+
+            # go through each row in the file
+            for row in reader:
+                # take the value from the chosen x column, convert to float, add to list
+                x_data.append(float(row[x_col - 1]))
+                # take the value from the chosen y column, convert to float, add to list
+                y_data.append(float(row[y_col - 1]))
+
+            self.x_values = x_data
+            self.y_values = y_data
+            self.x_error = find_error(x_data, x_err_col)
+            self.y_error = find_error(y_data, y_err_col)
+            self.x_title = x_title
+            self.y_title = y_title
+
+    def get_manual_data(
+            self,
+            x_vals,
+            y_vals,
+            x_err_vals=None,
+            y_err_vals=None,
+            x_title=None,
+            y_title=None
+    ):
+        """
+        Populate InputData from manual spreadsheet-style entry.
+        Values are converted to floats and stored as numpy arrays.
+        Error values are generated from resolution if not provided.
+        """
+
+        x_data = [float(v) for v in x_vals]
+        y_data = [float(v) for v in y_vals]
+
+        self.x_values = np.array(x_data, dtype=float)
+        self.y_values = np.array(y_data, dtype=float)
+
+        self.x_error = find_error(x_data, x_err_vals)
+        self.y_error = find_error(y_data, y_err_vals)
+
+        self.x_title = x_title or "X"
+        self.y_title = y_title or "Y"
 
 
 # Abstract base class for all graphs

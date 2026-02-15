@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
-from LineaX_Classes import InputData
+from LineaX_Classes import *
 from AnalysisMethod import *
-from ScreenManager import ScreenManager
+from ManagingScreen import *
 
 
 class DataInputScreen(tk.Frame):
@@ -246,11 +246,6 @@ class DataInputScreen(tk.Frame):
             bg="white"
         ).pack(anchor="w", pady=(8, 0))
 
-    # def disable_manual_entry(self):
-    #     for row in self.entries:
-    #         for entry in row:
-    #             entry.config(state="disabled")
-
     def select_file(self):
         path = filedialog.askopenfilename(
             title="Select Data File",
@@ -264,7 +259,7 @@ class DataInputScreen(tk.Frame):
         if not path:
             return
 
-        # Show progress
+        self.filepath = path
         self.progress_var.set(0)
         self.progress_label.config(text="0%")
         self.progress_frame.pack(pady=5, before=self.drop_zone.master)
@@ -275,7 +270,6 @@ class DataInputScreen(tk.Frame):
             self.progress_label.config(text="30%")
             self.parent.update()
 
-            # Read file
             if path.endswith(".csv"):
                 self.df = pd.read_csv(path)
             else:
@@ -285,7 +279,6 @@ class DataInputScreen(tk.Frame):
             self.progress_label.config(text="70%")
             self.parent.update()
 
-            # Update UI
             filename = path.split("/")[-1]
             self.drop_label.config(
                 text=f"✓ {filename}",
@@ -299,17 +292,13 @@ class DataInputScreen(tk.Frame):
             self.progress_label.config(text="100%")
             self.parent.update()
 
-            # Disable manual entry ONLY on success
             self.set_panel_state(self.manual_panel, enabled=False)
             self.remove_file_btn.place(relx=1, rely=0, anchor="ne")
 
         except Exception as e:
             self.df = None
-            messagebox.showerror("File Error", f"Could not read file:\n{str(e)}")
-            self.drop_label.config(
-                text="Drop file or click to browse",
-                fg="#64748b"
-            )
+            self.filepath = None
+            messagebox.showerror("File Error", str(e))
 
         finally:
             self.parent.after(300, self.progress_frame.pack_forget)
@@ -340,6 +329,32 @@ class DataInputScreen(tk.Frame):
             f"Columns: {len(cols)}\n\n"
             f"Please verify column mappings below."
         )
+
+    def collect_file_data(self):
+        """
+        Uses read_csv_file or read_excel from LineaX_Classes.
+        Stores data as numpy arrays inside InputData.
+        """
+
+        x_idx = self.df.columns.get_loc(self.x_col.get()) + 1
+        y_idx = self.df.columns.get_loc(self.y_col.get()) + 1
+
+        x_err = None if self.x_err_col.get() == "None" else self.df.columns.get_loc(self.x_err_col.get()) + 1
+        y_err = None if self.y_err_col.get() == "None" else self.df.columns.get_loc(self.y_err_col.get()) + 1
+
+        data = InputData()
+
+        if self.filepath.endswith(".csv"):
+            data.read_csv_file(self.filepath, x_idx, y_idx, x_err, y_err)
+        else:
+            data.read_excel(self.filepath, x_idx, y_idx, x_err, y_err)
+
+        data.x_values = np.array(data.x_values, dtype=float)
+        data.y_values = np.array(data.y_values, dtype=float)
+        data.x_error = np.array(data.x_error, dtype=float)
+        data.y_error = np.array(data.y_error, dtype=float)
+
+        self.input_data = data
 
     def create_manual_panel(self, parent):
         """Create right panel for manual data entry"""
@@ -550,34 +565,27 @@ class DataInputScreen(tk.Frame):
         return data if data["X"] else None
 
     def proceed_to_next(self):
-        """Validate and proceed to next screen"""
-        # Check if we have CSV/Excel data
-        if self.df is not None:
-            if not self.x_col.get() or not self.y_col.get():
-                messagebox.showwarning(
-                    "Incomplete Mapping",
-                    "Please select X and Y columns from your imported file."
-                )
-                return
+        """
+        Decides which input path was used and passes InputData forward.
+        """
 
-            messagebox.showinfo("Success", "File data validated! Proceeding to analysis...")
-            # Here you would transition to the next screen
+        try:
+            if self.df is not None:
+                self.collect_file_data()
+            else:
+                self.collect_manual_data()
+
+            self.manager.set_data(self.input_data)
+
+            messagebox.showinfo(
+                "Data Validated",
+                "Data validated successfully. Proceeding to analysis."
+            )
+
             self.manager.show(AnalysisMethodScreen)
 
-        # Check manual entry
-        manual_data = self.get_manual_data()
-        if manual_data and len(manual_data["X"]) >= 3:
-            messagebox.showinfo("Success", f"Manual data validated ({len(manual_data['X'])} points)! Proceeding...")
-            # Here you would transition to the next screen
-            return
-
-        # No valid data
-        messagebox.showwarning(
-            "No Data",
-            "Please either:\n"
-            "• Import a CSV/Excel file and map columns, or\n"
-            "• Enter at least 3 data points manually"
-        )
+        except Exception as e:
+            messagebox.showerror("Data Error", str(e))
 
     def clear_placeholder(self, event, text):
         if event.widget.get() == text:

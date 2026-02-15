@@ -1,5 +1,5 @@
 import tkinter as tk
-from ScreenManager import ScreenManager
+from ManagingScreen import ScreenManager
 from AnalysisMethod import AnalysisMethodScreen
 from DataInput import DataInputScreen
 

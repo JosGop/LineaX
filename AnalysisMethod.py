@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from Equations import *
 from LineaX_Classes import ScientificEquation
+import ManagingScreen
 import sympy as sp
 from sympy.parsing.sympy_parser import (
     parse_expr,
@@ -149,7 +150,7 @@ class AnalysisMethodScreen(tk.Frame):
 
         self.selected_vars_display = tk.Label(
             panel,
-            text="Click on variables in the equation above",
+            text="Click on variables in the equation above that you have measured in your experiment",
             bg="#fffbeb",
             fg="#92400e",
             relief="solid",
@@ -1245,4 +1246,6 @@ if __name__ == "__main__":
 
 
     AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
+    # manager = ScreenManager(root)
+    # manager.show(AnalysisMethodScreen)
     root.mainloop()
