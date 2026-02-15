@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from Equations import *
+from LineaX_Classes import ScientificEquation
 import sympy as sp
 from sympy.parsing.sympy_parser import (
     parse_expr,
@@ -8,12 +9,9 @@ from sympy.parsing.sympy_parser import (
     implicit_multiplication_application
 )
 
-
-
 TRANSFORMS = standard_transformations + (
     implicit_multiplication_application,
 )
-
 
 
 class AnalysisMethodScreen(tk.Frame):
@@ -22,6 +20,11 @@ class AnalysisMethodScreen(tk.Frame):
         self.manager = manager
         self.library = EquationLibrary()
         self.selected_equation: Equation | None = None
+        self.scientific_equation: ScientificEquation | None = None
+
+        # Track selected variables
+        self.selected_vars = set()
+
         self.create_layout()
 
     def create_layout(self):
@@ -51,18 +54,56 @@ class AnalysisMethodScreen(tk.Frame):
 
         inner = tk.Frame(container, bg="#d1d5db", padx=15, pady=15)
         inner.pack(fill="both", expand=True)
+
+        # Configure grid to give row 0 all available space
         inner.grid_columnconfigure(0, weight=1)
         inner.grid_columnconfigure(1, weight=1)
+        inner.grid_rowconfigure(0, weight=1)
 
         self.create_linear_panel(inner)
         self.create_automated_panel(inner)
 
     def create_linear_panel(self, parent):
-        panel = tk.Frame(parent, bg="white", padx=20, pady=20)
-        panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        # Create a frame with scrollbar
+        panel_container = tk.Frame(parent, bg="white")
+        panel_container.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
-        tk.Label(panel, text="Linear Graph Analysis", font=("Segoe UI", 14, "bold"), bg="white").pack(anchor="w", pady=(0, 15))
+        # Create canvas and scrollbar
+        canvas = tk.Canvas(panel_container, bg="white", highlightthickness=0)
+        scrollbar = tk.Scrollbar(panel_container, orient="vertical", command=canvas.yview)
 
+        # Create the actual panel inside canvas
+        panel = tk.Frame(canvas, bg="white", padx=20, pady=20)
+
+        # Configure scrolling
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Pack scrollbar and canvas
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # Create window in canvas
+        canvas_frame = canvas.create_window((0, 0), window=panel, anchor="nw")
+
+        # Update scroll region when panel size changes
+        def on_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Also update the window width to match canvas
+            canvas.itemconfig(canvas_frame, width=event.width)
+
+        panel.bind("<Configure>", on_configure)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_frame, width=e.width))
+
+        # Mouse wheel scrolling
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        tk.Label(panel, text="Linear Graph Analysis", font=("Segoe UI", 14, "bold"), bg="white").pack(anchor="w",
+                                                                                                      pady=(0, 15))
+
+        # Search section
         search_frame = tk.Frame(panel, bg="white")
         search_frame.pack(fill="x")
 
@@ -80,71 +121,139 @@ class AnalysisMethodScreen(tk.Frame):
         self.results_box.pack(fill="x", pady=(5, 10))
         self.results_box.bind("<<ListboxSelect>>", self._select_equation)
 
-        self.equation_display = tk.Label(
+        # Custom equation button
+        tk.Button(
             panel,
-            text="",
-            bg="#f8fafc",
-            height=3,
-            relief="solid"
+            text="+ Enter Custom Equation",
+            bg="#f3f4f6",
+            fg="#0f172a",
+            relief="flat",
+            cursor="hand2",
+            font=("Segoe UI", 9),
+            command=self._enter_custom_equation
+        ).pack(fill="x", pady=(0, 10))
+
+        # Equation display with clickable variables
+        tk.Label(panel, text="Selected Equation:", bg="white", font=("Segoe UI", 10, "bold")).pack(anchor="w",
+                                                                                                   pady=(10, 5))
+
+        self.equation_display_frame = tk.Frame(panel, bg="#f8fafc", relief="solid", borderwidth=1)
+        self.equation_display_frame.pack(fill="x", pady=(0, 10))
+
+        self.equation_canvas = tk.Canvas(self.equation_display_frame, bg="#f8fafc", height=60, highlightthickness=0)
+        self.equation_canvas.pack(fill="x", padx=10, pady=10)
+
+        # Selected variables display
+        tk.Label(panel, text="Variables to Measure:", bg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w",
+                                                                                                      pady=(10, 5))
+
+        self.selected_vars_display = tk.Label(
+            panel,
+            text="Click on variables in the equation above",
+            bg="#fffbeb",
+            fg="#92400e",
+            relief="solid",
+            borderwidth=1,
+            padx=10,
+            pady=8,
+            justify="left",
+            anchor="w"
         )
-        self.equation_display.pack(fill="x", pady=10)
+        self.selected_vars_display.pack(fill="x", pady=(0, 10))
 
-        tk.Label(panel, text="Select Variables", bg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w",
-                                                                                                 pady=(10, 5))
-
-        tk.Label(panel, text="X Variable", bg="white").pack(anchor="w")
-        self.x_var = ttk.Combobox(panel, state="readonly")
-        self.x_var.pack(fill="x", pady=(0, 8))
-
-        tk.Label(panel, text="Y Variable", bg="white").pack(anchor="w")
-        self.y_var = ttk.Combobox(panel, state="readonly")
-        self.y_var.pack(fill="x", pady=(0, 8))
-
-        tk.Label(panel, text="Value to Find (optional)", bg="white").pack(anchor="w")
+        # Optional value to find
+        tk.Label(panel, text="Value to Find (optional):", bg="white", font=("Segoe UI", 10, "bold")).pack(anchor="w",
+                                                                                                          pady=(10, 5))
         self.find_var = ttk.Combobox(panel, state="readonly")
         self.find_var.pack(fill="x", pady=(0, 12))
 
-
-        tk.Button(panel, text="Generate Linear Graph", bg="#0f172a", fg="white").pack(side="bottom", fill="x", pady=(25, 0))
-
-        self.constants_frame = tk.LabelFrame(
-            panel,
-            text="Constant Values",
-            bg="white",
-            padx=10,
-            pady=10
-        )
-        self.constants_frame.pack(fill="x", pady=10)
-
-        self.constant_entries = {}
-
+        # Linearise button
         tk.Button(
             panel,
             text="Linearise Equation",
             bg="#0f172a",
             fg="white",
-            command=self._linearise_equation
+            font=("Segoe UI", 11, "bold"),
+            command=self._linearise_equation,
+            cursor="hand2"
         ).pack(fill="x", pady=(15, 8))
 
-        self.linearised_display = tk.Label(
+        # Linearised result display
+        self.linearised_display_frame = tk.LabelFrame(
             panel,
-            text="",
-            bg="#f8fafc",
+            text="Linearised Form",
+            bg="white",
             fg="#0f172a",
-            relief="solid",
-            justify="left",
-            anchor="w",
+            font=("Segoe UI", 10, "bold"),
             padx=10,
-            pady=8
+            pady=10
         )
-        self.linearised_display.pack(fill="x", pady=(0, 15))
-        self.linearised_display.pack_forget()
+
+        self.linearised_equation_label = tk.Label(
+            self.linearised_display_frame,
+            text="",
+            bg="white",
+            fg="#0f172a",
+            font=("Courier", 11),
+            justify="left",
+            anchor="w"
+        )
+        self.linearised_equation_label.pack(fill="x", pady=(0, 10))
+
+        self.linearised_info_label = tk.Label(
+            self.linearised_display_frame,
+            text="",
+            bg="#f0f9ff",
+            fg="#1e40af",
+            justify="left",
+            anchor="nw",
+            padx=8,
+            pady=8,
+            relief="solid",
+            borderwidth=1
+        )
+        self.linearised_info_label.pack(fill="both", expand=True)
+
+        # Constants section - appears AFTER linearisation
+        self.constants_frame = tk.LabelFrame(
+            panel,
+            text="Required Constants",
+            bg="white",
+            fg="#0f172a",
+            font=("Segoe UI", 10, "bold"),
+            padx=10,
+            pady=10
+        )
+        self.constant_entries = {}
+
+        # Units section - appears AFTER linearisation
+        self.units_frame = tk.LabelFrame(
+            panel,
+            text="Measurement Units",
+            bg="white",
+            fg="#0f172a",
+            font=("Segoe UI", 10, "bold"),
+            padx=10,
+            pady=10
+        )
+        self.unit_entries = {}
+
+        # Generate graph button - appears AFTER linearisation
+        self.generate_graph_button = tk.Button(
+            panel,
+            text="Generate Linear Graph",
+            bg="#059669",
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            cursor="hand2"
+        )
 
     def create_automated_panel(self, parent):
         panel = tk.Frame(parent, bg="white", padx=20, pady=20)
         panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
-        tk.Label(panel, text="Automated Model Selection", font=("Segoe UI", 14, "bold"), bg="white").pack(anchor="w", pady=(0, 15))
+        tk.Label(panel, text="Automated Model Selection", font=("Segoe UI", 14, "bold"), bg="white").pack(anchor="w",
+                                                                                                          pady=(0, 15))
 
         models = ["Linear", "Quadratic", "Cubic", "Exponential", "Logarithmic", "Gaussian", "Logistic", "Sinusoidal"]
         for model in models:
@@ -161,7 +270,139 @@ class AnalysisMethodScreen(tk.Frame):
         for eq in results:
             self.results_box.insert(tk.END, f"{eq.name}             {eq.expression}")
 
+    def _enter_custom_equation(self):
+        """Allow user to enter a custom equation."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Enter Custom Equation")
+        dialog.geometry("500x350")
+        dialog.configure(bg="white")
 
+        tk.Label(
+            dialog,
+            text="Enter Custom Equation",
+            font=("Segoe UI", 14, "bold"),
+            bg="white"
+        ).pack(pady=(20, 10))
+
+        tk.Label(
+            dialog,
+            text="Format: variable = expression\nExample: F = m*a  or  E = 0.5*m*v**2\nUse 'lambda' or 'λ' for lambda, 'mu' or 'μ' for mu",
+            font=("Segoe UI", 9),
+            bg="white",
+            fg="#6b7280",
+            justify="left"
+        ).pack(pady=(0, 20))
+
+        equation_entry = tk.Entry(dialog, font=("Segoe UI", 11))
+        equation_entry.pack(fill="x", padx=40, pady=(0, 20))
+
+        def submit():
+            equation_str = equation_entry.get().strip()
+            if not equation_str or "=" not in equation_str:
+                messagebox.showwarning("Invalid Equation", "Please enter a valid equation with '='")
+                return
+
+            # Replace common text representations with Greek letters
+            equation_str = equation_str.replace('lambda', 'λ')
+            equation_str = equation_str.replace('Lambda', 'λ')
+            equation_str = equation_str.replace('mu', 'μ')
+            equation_str = equation_str.replace('sigma', 'σ')
+            equation_str = equation_str.replace('theta', 'θ')
+            equation_str = equation_str.replace('phi', 'φ')
+            equation_str = equation_str.replace('rho', 'ρ')
+
+            # Parse to extract variables
+            try:
+                lhs_str, rhs_str = equation_str.split("=")
+                all_vars = set()
+
+                import re
+                # Extract variable names (letters, Greek letters, possibly with numbers/subscripts)
+                # Match: single letters, Greek letters, or identifiers with numbers
+                for part in [lhs_str, rhs_str]:
+                    # Match standard variables (v, v0, v_0, etc.)
+                    vars_found = re.findall(r'[a-zA-Z_][a-zA-Z0-9_]*', part)
+                    all_vars.update(vars_found)
+
+                    # Also match Greek letters
+                    greek_letters = re.findall(r'[α-ωΑ-Ω]', part)
+                    all_vars.update(greek_letters)
+
+                # Remove function names
+                function_names = {'exp', 'log', 'ln', 'sin', 'cos', 'tan', 'sqrt',
+                                  'abs', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh'}
+                all_vars = all_vars - function_names
+
+                if len(all_vars) < 2:
+                    messagebox.showwarning(
+                        "Invalid Equation",
+                        "Equation must have at least 2 variables.\nFound: " + ", ".join(all_vars)
+                    )
+                    return
+
+                # Create a custom equation with proper variable descriptions
+                variables = {}
+                for var in all_vars:
+                    # Try to give meaningful descriptions
+                    if var in ['λ', 'lam', 'lamb']:
+                        variables[var] = "wavelength or decay constant"
+                    elif var in ['μ', 'mu']:
+                        variables[var] = "coefficient"
+                    elif var in ['σ', 'sigma']:
+                        variables[var] = "cross-section or Stefan constant"
+                    elif var in ['ρ', 'rho']:
+                        variables[var] = "density or resistivity"
+                    elif var in ['θ', 'theta']:
+                        variables[var] = "angle"
+                    elif var in ['φ', 'phi']:
+                        variables[var] = "angle or work function"
+                    elif var == 'f':
+                        variables[var] = "frequency"
+                    elif var == 'v':
+                        variables[var] = "velocity"
+                    elif var == 'c':
+                        variables[var] = "speed of light or constant"
+                    elif var == 'h':
+                        variables[var] = "height or Planck constant"
+                    else:
+                        variables[var] = var  # Use variable name as description
+
+                self.selected_equation = Equation(
+                    "Custom Equation",
+                    equation_str,
+                    variables,
+                    linearisation_type="custom"
+                )
+
+                self.selected_vars.clear()
+                self.scientific_equation = ScientificEquation(equation_str)
+
+                # Hide linearised display and constants
+                self.linearised_display_frame.pack_forget()
+                self.constants_frame.pack_forget()
+                self.units_frame.pack_forget()
+                self.generate_graph_button.pack_forget()
+
+                # Display equation
+                self._display_clickable_equation()
+                self._update_selected_vars_display()
+                self._update_find_var_options()
+
+                dialog.destroy()
+
+            except Exception as e:
+                messagebox.showerror("Parse Error",
+                                     f"Could not parse equation:\n{e}\n\nPlease check your equation format.")
+
+        tk.Button(
+            dialog,
+            text="Add Equation",
+            bg="#0f172a",
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            cursor="hand2",
+            command=submit
+        ).pack(fill="x", padx=40, pady=20)
 
     def _select_equation(self, event):
         if not self.results_box.curselection():
@@ -169,66 +410,228 @@ class AnalysisMethodScreen(tk.Frame):
 
         index = self.results_box.curselection()[0]
         display_text = self.results_box.get(index)
-        name = display_text.split()[0]
+        name = display_text.split("   ")[0].strip()
 
         for eq in self.library.search(name):
-            self.selected_equation = eq
-            break
+            if eq.name == name:
+                self.selected_equation = eq
+                break
 
-        self.equation_display.config(text=self.selected_equation.expression)
+        # Reset state
+        self.selected_vars.clear()
+        self.scientific_equation = ScientificEquation(self.selected_equation.expression)
 
-        vars_list = list(self.selected_equation.variables.keys())
+        # Hide linearised display and constants
+        self.linearised_display_frame.pack_forget()
+        self.constants_frame.pack_forget()
 
-        self.x_var.config(values=vars_list)
-        self.y_var.config(values=vars_list)
-        self.find_var.config(values=["None"] + vars_list)
-        self.find_var.set("None")
+        # Display equation with clickable variables
+        self._display_clickable_equation()
 
-        self.x_var.bind("<<ComboboxSelected>>", self._on_variable_change)
-        self.y_var.bind("<<ComboboxSelected>>", self._on_variable_change)
-        self.find_var.bind("<<ComboboxSelected>>", self._on_variable_change)
+        # Update UI
+        self._update_selected_vars_display()
+        self._update_find_var_options()
 
-        self.find_var.set("None")
-        self._enforce_variable_rules()
-        self._update_constants()
+    def _display_clickable_equation(self):
+        """Display equation with clickable variable buttons."""
+        self.equation_canvas.delete("all")
 
+        if not self.selected_equation:
+            return
 
-    def _update_constants(self, event=None):
+        # Parse equation into parts
+        expr = self.selected_equation.expression
+        x_pos = 10
+        y_pos = 30
+
+        # Simple parser - split by common operators, but preserve Greek letters
+        import re
+        # Split by operators but keep them
+        # Match: operators, numbers, variables (including Greek)
+        pattern = r'([\s=+\-*/()^]+|[0-9.]+|[a-zA-Z_][a-zA-Z0-9_]*|[α-ωΑ-Ω]+)'
+        tokens = re.findall(pattern, expr)
+
+        for token in tokens:
+            token_stripped = token.strip()
+            if not token_stripped:
+                continue
+
+            # Check if token is a variable (in our variables dict)
+            if token_stripped in self.selected_equation.variables:
+                # Create clickable button for variable
+                is_selected = token_stripped in self.selected_vars
+                color = "#3b82f6" if is_selected else "#6b7280"
+                bg_color = "#dbeafe" if is_selected else "#f3f4f6"
+
+                # Create button
+                btn = tk.Button(
+                    self.equation_canvas,
+                    text=token_stripped,
+                    font=("Segoe UI", 11, "bold"),
+                    fg=color,
+                    bg=bg_color,
+                    relief="raised",
+                    borderwidth=2,
+                    cursor="hand2",
+                    command=lambda v=token_stripped: self._toggle_variable(v)
+                )
+
+                btn_window = self.equation_canvas.create_window(x_pos, y_pos, anchor="w", window=btn)
+                self.equation_canvas.update()
+                bbox = self.equation_canvas.bbox(btn_window)
+                x_pos = bbox[2] + 5
+            else:
+                # Draw text for operators, numbers, and constants
+                # Handle spaces
+                if token == ' ':
+                    x_pos += 3
+                    continue
+
+                text_id = self.equation_canvas.create_text(
+                    x_pos, y_pos,
+                    text=token_stripped,
+                    font=("Segoe UI", 12),
+                    fill="#0f172a",
+                    anchor="w"
+                )
+                bbox = self.equation_canvas.bbox(text_id)
+                if bbox:
+                    x_pos = bbox[2] + 3
+
+    def _toggle_variable(self, var):
+        """Toggle variable selection."""
+        if var in self.selected_vars:
+            self.selected_vars.remove(var)
+        else:
+            # Limit to 2 measured variables
+            if len(self.selected_vars) >= 2:
+                messagebox.showwarning(
+                    "Selection Limit",
+                    "You can only select 2 variables to measure.\nDeselect one first."
+                )
+                return
+            self.selected_vars.add(var)
+
+        # Update displays
+        self._display_clickable_equation()
+        self._update_selected_vars_display()
+        self._update_find_var_options()
+
+    def _update_selected_vars_display(self):
+        """Update the display showing selected variables."""
+        if len(self.selected_vars) == 0:
+            text = "Click on variables in the equation above"
+            bg = "#fffbeb"
+            fg = "#92400e"
+        elif len(self.selected_vars) == 1:
+            var = list(self.selected_vars)[0]
+            meaning = self.selected_equation.variables[var]
+            text = f"Selected: {var} ({meaning})\n\nSelect one more variable"
+            bg = "#fef3c7"
+            fg = "#92400e"
+        else:
+            text = "Selected variables:\n"
+            for var in sorted(self.selected_vars):
+                meaning = self.selected_equation.variables[var]
+                text += f"  • {var} ({meaning})\n"
+            bg = "#d1fae5"
+            fg = "#065f46"
+
+        self.selected_vars_display.config(text=text, bg=bg, fg=fg)
+
+    def _update_constants_post_linearisation(self):
+        """
+        Update constants section AFTER linearisation.
+        Only request constants that CANNOT be determined from the graph.
+
+        For example, in I = I0*e^(-μ*x):
+        - If finding μ: Don't need I0 (it's in the intercept)
+        - If finding I0: Don't need it (it's in the intercept)
+        - Other constants (if any) still needed
+        """
         for widget in self.constants_frame.winfo_children():
             widget.destroy()
 
         if not self.selected_equation:
             return
 
-        x = self.x_var.get()
-        y = self.y_var.get()
-        f = self.find_var.get()
+        find_var = self.find_var.get()
 
-        chosen = {x, y}
-        if f and f != "None":
-            chosen.add(f)
+        # Identify which variables are "findable" from the linearised form
+        # These are variables that appear in the gradient or intercept
+        findable_from_graph = set()
+
+        # For exponential equations, the coefficient in the exponent (e.g., μ in e^(-μx))
+        # and the initial value (e.g., I0) can both be found from the graph
+        if self.selected_equation.linearisation_type == "exponential":
+            # Find variables that aren't the measured ones
+            for var in self.selected_equation.variables.keys():
+                if var not in self.selected_vars:
+                    findable_from_graph.add(var)
+
+        # Variables that need constant values:
+        # - Not measured (not in selected_vars)
+        # - Not the find variable
+        # - Not findable from the graph structure
+        excluded = self.selected_vars.copy()
+        if find_var and find_var != "None":
+            excluded.add(find_var)
+        excluded.update(findable_from_graph)
 
         remaining = [
             v for v in self.selected_equation.variables.keys()
-            if v not in chosen
+            if v not in excluded
         ]
 
         self.constant_entries.clear()
+
+        if not remaining:
+            tk.Label(
+                self.constants_frame,
+                text="✓ No additional constants needed\n\nAll unknowns can be determined from the graph!",
+                fg="#065f46",
+                bg="#d1fae5",
+                font=("Segoe UI", 9),
+                justify="left",
+                padx=10,
+                pady=10,
+                relief="solid",
+                borderwidth=1
+            ).pack(fill="x")
+            return
+
+        tk.Label(
+            self.constants_frame,
+            text="Enter values for these constants:",
+            fg="#0f172a",
+            bg="white",
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", pady=(0, 5))
 
         for var in remaining:
             row = tk.Frame(self.constants_frame, bg="white")
             row.pack(fill="x", pady=3)
 
+            meaning = self.selected_equation.variables[var]
             tk.Label(
                 row,
-                text=f"{var} =",
-                width=6,
+                text=f"{var}:",
+                width=4,
                 anchor="w",
-                bg="white"
+                bg="white",
+                font=("Segoe UI", 10, "bold")
             ).pack(side="left")
 
-            entry = tk.Entry(row)
-            entry.pack(side="left", fill="x", expand=True)
+            entry = tk.Entry(row, width=15)
+            entry.pack(side="left", padx=(0, 10))
+
+            tk.Label(
+                row,
+                text=meaning,
+                fg="#6b7280",
+                bg="white",
+                font=("Segoe UI", 9)
+            ).pack(side="left", fill="x", expand=True)
 
             default = self._default_constant(var)
             if default is not None:
@@ -236,190 +639,587 @@ class AnalysisMethodScreen(tk.Frame):
 
             self.constant_entries[var] = entry
 
-    def _default_constant(self, symbol):
-        constants = {
-            "h": 6.63e-34,
-            "c": 3.0e8,
-            "e": 1.6e-19,
-            "R": 8.31,
-            "g": 9.81,
-            "N": 6.02e23,
-        }
-        return constants.get(symbol)
+    def _update_units_input(self, x_var, y_var):
+        """Ask user for measurement units."""
+        for widget in self.units_frame.winfo_children():
+            widget.destroy()
 
-    def _on_variable_change(self, event=None):
-        self._enforce_variable_rules()
-        self._update_constants()
-
-    def _enforce_variable_rules(self):
         if not self.selected_equation:
             return
 
-        all_vars = list(self.selected_equation.variables.keys())
+        tk.Label(
+            self.units_frame,
+            text="Enter the units you measured your variables in:",
+            fg="#0f172a",
+            bg="white",
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", pady=(0, 10))
 
-        x = self.x_var.get()
-        y = self.y_var.get()
-        f = self.find_var.get()
+        self.unit_entries.clear()
 
-        # X and Y must be different
-        if x and x == y:
-            self.y_var.set("")
+        # Add unit inputs for the two measured variables
+        for var in [x_var, y_var]:
+            row = tk.Frame(self.units_frame, bg="white")
+            row.pack(fill="x", pady=5)
 
-        # Rebuild Y options excluding X
-        y_options = [v for v in all_vars if v != x]
-        self.y_var.config(values=y_options)
+            meaning = self.selected_equation.variables.get(var, var)
 
-        # Rebuild X options excluding Y
-        x_options = [v for v in all_vars if v != y]
-        self.x_var.config(values=x_options)
+            tk.Label(
+                row,
+                text=f"{var}:",
+                width=6,
+                anchor="w",
+                bg="white",
+                font=("Segoe UI", 10, "bold")
+            ).pack(side="left")
 
-        # Find cannot clash with X or Y
-        find_options = ["None"] + [
-            v for v in all_vars
-            if v != x and v != y
+            entry = tk.Entry(row, width=20)
+            entry.pack(side="left", padx=(0, 10))
+            entry.insert(0, "SI units")  # Placeholder
+
+            tk.Label(
+                row,
+                text=f"({meaning})",
+                fg="#6b7280",
+                bg="white",
+                font=("Segoe UI", 9)
+            ).pack(side="left", fill="x", expand=True)
+
+            self.unit_entries[var] = entry
+
+        # Add helpful note
+        note = tk.Label(
+            self.units_frame,
+            text="💡 If your units don't match SI units, the system will help convert them.\nExample: If you measured in cm, enter 'cm' and we'll convert to m.",
+            fg="#059669",
+            bg="#f0fdf4",
+            font=("Segoe UI", 8),
+            justify="left",
+            padx=8,
+            pady=6,
+            relief="solid",
+            borderwidth=1
+        )
+        note.pack(fill="x", pady=(10, 0))
+
+    def _update_find_var_options(self):
+        """Update the dropdown for optional variable to find."""
+        if not self.selected_equation:
+            return
+
+        # Can only find variables that aren't being measured
+        available = [
+            v for v in self.selected_equation.variables.keys()
+            if v not in self.selected_vars
         ]
-        self.find_var.config(values=find_options)
 
-        if f in (x, y):
-            self.find_var.set("None")
+        self.find_var.config(values=["None"] + available)
+        self.find_var.set("None")
+
+    def _default_constant(self, symbol):
+        """Get default value for known physical constants."""
+        return CONSTANTS.get(symbol)
 
     def _linearise_equation(self):
+        """Linearise the selected equation based on user's variable choices."""
         if not self.selected_equation:
+            messagebox.showwarning("No Equation", "Please select an equation first.")
             return
 
-        x_sym = self.x_var.get()
-        y_sym = self.y_var.get()
-        find_sym = self.find_var.get()
-
-        if not x_sym or not y_sym:
-            tk.messagebox.showwarning(
+        if len(self.selected_vars) != 2:
+            messagebox.showwarning(
                 "Invalid Selection",
-                "Please select distinct X and Y variables."
+                "Please select exactly 2 variables to measure by clicking on them in the equation."
             )
             return
 
-        # Parse the equation string into SymPy
-        lhs_str, rhs_str = self.selected_equation.expression.split("=")
+        # Get the two measured variables
+        measured_vars = list(self.selected_vars)
+        var1, var2 = measured_vars[0], measured_vars[1]
 
-        lhs = parse_expr(lhs_str.strip(), transformations=TRANSFORMS)
-        rhs = parse_expr(rhs_str.strip(), transformations=TRANSFORMS)
+        # Get variable to find (if any)
+        find_sym = self.find_var.get()
+        if find_sym == "None":
+            find_sym = None
 
-        equation = sp.Eq(lhs, rhs)
+        # Parse the equation (without substituting constants yet)
+        try:
+            # Clean the equation string for parsing
+            expr_str = self.selected_equation.expression
 
-        # Build symbol map
-        sympy_x, sympy_y = sp.symbols("x y")
+            # Replace common notations
+            expr_str = expr_str.replace("^", "**")  # Convert ^ to **
+            expr_str = expr_str.replace("₀", "0")  # Replace subscript 0
+            expr_str = expr_str.replace("λ", "lambda_")  # Replace lambda
+            expr_str = expr_str.replace("μ", "mu")  # Replace mu
+            expr_str = expr_str.replace("σ", "sigma")  # Replace sigma
+            expr_str = expr_str.replace("ρ", "rho")  # Replace rho
+            expr_str = expr_str.replace("θ", "theta")  # Replace theta
+            expr_str = expr_str.replace("φ", "phi")  # Replace phi
+            expr_str = expr_str.replace("π", "pi")  # Replace pi
+            expr_str = expr_str.replace("Δ", "Delta")  # Replace Delta
 
-        symbol_map = {
-            sp.Symbol(x_sym): sympy_x,
-            sp.Symbol(y_sym): sympy_y
-        }
+            # Handle other subscripts (just remove them for parsing)
+            import re
+            expr_str = re.sub(r'([A-Za-z])([₀₁₂₃₄₅₆₇₈₉])', r'\1', expr_str)
 
-        # Substitute constants
-        for var, entry in self.constant_entries.items():
-            try:
-                value = float(entry.get())
-            except ValueError:
-                tk.messagebox.showerror(
-                    "Invalid Constant",
-                    f"Constant {var} must be numeric."
-                )
-                return
+            lhs_str, rhs_str = expr_str.split("=")
 
-            symbol_map[sp.Symbol(var)] = value
+            # Create a local namespace with necessary symbols and functions
+            local_dict = {
+                'e': sp.E,
+                'pi': sp.pi,
+                'exp': sp.exp,
+                'log': sp.log,
+                'ln': sp.log,
+                'sin': sp.sin,
+                'cos': sp.cos,
+                'tan': sp.tan,
+                'sqrt': sp.sqrt,
+            }
 
-        # Apply mapping to equation
-        mapped_eq = equation.subs(symbol_map)
+            # Add all variables as symbols
+            for var in self.selected_equation.variables.keys():
+                clean_var = var.replace("₀", "0").replace("₁", "1")
+                local_dict[clean_var] = sp.Symbol(var)
 
-        # Linearise using your existing function
-        linearised = self.linearise(mapped_eq)
+            # Also add cleaned versions
+            local_dict['mu'] = sp.Symbol('μ')
+            local_dict['lambda_'] = sp.Symbol('λ')
+            local_dict['sigma'] = sp.Symbol('σ')
+            local_dict['rho'] = sp.Symbol('ρ')
+            local_dict['theta'] = sp.Symbol('θ')
+            local_dict['phi'] = sp.Symbol('φ')
 
-        # Reverse substitution back to scientific symbols
-        reverse_map = {
-            sympy_x: sp.Symbol(x_sym),
-            sympy_y: sp.Symbol(y_sym)
-        }
+            lhs = parse_expr(lhs_str.strip(), transformations=TRANSFORMS, local_dict=local_dict)
+            rhs = parse_expr(rhs_str.strip(), transformations=TRANSFORMS, local_dict=local_dict)
+            equation = sp.Eq(lhs, rhs)
 
-        final_eq = linearised.subs(reverse_map)
+        except Exception as e:
+            messagebox.showerror(
+                "Parse Error",
+                f"Could not parse equation.\n\nTechnical details: {str(e)}\n\nPlease try a different equation or contact support."
+            )
+            return
+
+        # Try both orderings and analyze which gives better linearisation
+        result1 = self._attempt_linearisation(equation, var1, var2, find_sym)
+        result2 = self._attempt_linearisation(equation, var2, var1, find_sym)
+
+        # Pick the result that produces a simpler/better linear form
+        # Prefer orderings where:
+        # 1. One axis needs transformation (ln, ^2) and the other doesn't
+        # 2. The physically sensible independent variable is on X-axis
+
+        def score_result(result):
+            """Score a result - lower is better."""
+            if not result:
+                return float('inf')
+
+            _, x_var, y_var, x_transform, y_transform, _, _ = result
+            score = 0
+
+            # Prefer when only one axis is transformed
+            x_is_transformed = x_transform != x_var
+            y_is_transformed = y_transform != y_var
+
+            if x_is_transformed and y_is_transformed:
+                score += 10  # Both transformed - not ideal
+            elif not x_is_transformed and not y_is_transformed:
+                score += 5  # Neither transformed - okay
+            else:
+                score += 0  # One transformed - ideal
+
+            # Prefer Y-axis transformation over X-axis
+            # (e.g., ln(I) vs x is better than I vs ln(x))
+            if y_is_transformed:
+                score -= 2
+            if x_is_transformed:
+                score += 1
+
+            # Additional heuristic: prefer common physics conventions
+            # Independent variables (typically on X-axis): t, x, s, r, d, f, λ, θ
+            # Dependent variables (typically on Y-axis): v, V, F, E, p, I, A, N
+            independent_vars = {'t', 'x', 's', 'r', 'd', 'f', 'λ', 'θ', 'φ', 'ω'}
+            dependent_vars = {'v', 'V', 'F', 'E', 'p', 'I', 'A', 'N', 'Q', 'P', 'T'}
+
+            # Bonus for correct convention
+            if x_var in independent_vars:
+                score -= 1  # Good - independent on X
+            if y_var in dependent_vars:
+                score -= 1  # Good - dependent on Y
+
+            # Penalty for backwards convention
+            if x_var in dependent_vars:
+                score += 2  # Bad - dependent on X
+            if y_var in independent_vars:
+                score += 2  # Bad - independent on Y
+
+            return score
+
+        score1 = score_result(result1)
+        score2 = score_result(result2)
+
+        if score1 <= score2:
+            result = result1
+        else:
+            result = result2
+
+        if not result:
+            messagebox.showinfo(
+                "Linearisation Result",
+                "This equation is already in linear form or doesn't require transformation."
+            )
+            # Show the equation as-is
+            self._display_linear_result(equation, var1, var2, find_sym)
+            return
+
+        # Unpack result
+        linearised_eq, x_var, y_var, x_transform, y_transform, grad_meaning, int_meaning = result
+
+        # Store in scientific equation object using the simple structure
+        self.scientific_equation.linearised_equation = str(linearised_eq)
+        self.scientific_equation.x = x_transform  # e.g., "x" or "ln(x)"
+        self.scientific_equation.y = y_transform  # e.g., "ln(I)"
+        self.scientific_equation.m_meaning = grad_meaning
+        self.scientific_equation.c_meaning = int_meaning
 
         # Display result
-        self.linearised_display.config(
-            text=f"Linearised form:\n{sp.pretty(final_eq)}"
-        )
-        self.linearised_display.pack(fill="x", pady=(0, 15))
+        self._display_linear_result(linearised_eq, x_var, y_var, find_sym,
+                                    x_transform, y_transform, grad_meaning, int_meaning)
+
+        # Now show constants frame and populate it
+        self.constants_frame.pack(fill="x", pady=(10, 10))
+        self._update_constants_post_linearisation()
+
+        # Show units frame
+        self.units_frame.pack(fill="x", pady=(10, 10))
+        self._update_units_input(x_var, y_var)
+
+        # Show generate graph button at the bottom
+        self.generate_graph_button.pack(fill="x", pady=(15, 0))
+
+    def _attempt_linearisation(self, equation, x_var, y_var, find_var):
+        """
+        Attempt to linearise equation with given x and y variable assignment.
+        Returns tuple of (linearised_eq, x_var, y_var, x_transform, y_transform, grad_meaning, int_meaning)
+        or None if linearisation fails.
+        """
+        x_temp, y_temp = sp.symbols("x y")
+
+        # Create substitution map
+        symbol_map = {
+            sp.Symbol(x_var): x_temp,
+            sp.Symbol(y_var): y_temp
+        }
+
+        # Apply mapping
+        try:
+            mapped_eq = equation.subs(symbol_map)
+        except Exception:
+            return None
+
+        # Apply linearisation function
+        try:
+            linearised = self.linearise(mapped_eq)
+        except Exception:
+            return None
+
+        # Now substitute back to original symbols for display
+        reverse_map = {
+            x_temp: sp.Symbol(x_var),
+            y_temp: sp.Symbol(y_var)
+        }
+        linearised_with_original_symbols = linearised.subs(reverse_map)
+
+        # Determine transformations by looking at the linearised equation
+        x_transform, y_transform = self._identify_transforms(linearised, x_var, y_var)
+        grad_meaning, int_meaning = self._identify_meanings(linearised, self.selected_equation,
+                                                            x_var, y_var, find_var)
+
+        return (linearised_with_original_symbols, x_var, y_var, x_transform, y_transform, grad_meaning, int_meaning)
+
+    def _identify_transforms(self, linearised_eq, x_var, y_var):
+        """Identify what transformations were applied to x and y."""
+        x_temp, y_temp = sp.symbols("x y")
+
+        # Default - no transformation
+        x_transform = x_var
+        y_transform = y_var
+
+        lhs = linearised_eq.lhs
+        rhs = linearised_eq.rhs
+
+        # Check LHS for transformations of y
+        if lhs.has(sp.log):
+            # Check if it's log(y_temp)
+            if lhs == sp.log(y_temp):
+                y_transform = f"ln({y_var})"
+            elif lhs.func == sp.log:
+                y_transform = f"ln({y_var})"
+        # Check if LHS has a coefficient (like e*y, not just y)
+        elif lhs != y_temp and lhs.has(y_temp) and not lhs.has(y_temp ** 2):
+            # Extract the full expression on LHS
+            # For e*y, we want to show "e*V" as the Y-axis
+            try:
+                # Substitute back y_temp with the actual variable
+                lhs_with_var = lhs.subs(y_temp, sp.Symbol(y_var))
+                y_transform = str(lhs_with_var)
+            except:
+                y_transform = y_var
+
+        # Check for powers of y (y², y³)
+        if lhs == y_temp ** 2:
+            y_transform = f"{y_var}²"
+        elif lhs == y_temp ** 3:
+            y_transform = f"{y_var}³"
+        elif lhs.has(y_temp ** 2):
+            y_transform = f"{y_var}²"
+        elif lhs.has(y_temp ** 3):
+            y_transform = f"{y_var}³"
+
+        # Check RHS for transformations of x
+        # Log transform
+        if rhs.has(sp.log):
+            for arg in sp.preorder_traversal(rhs):
+                if isinstance(arg, sp.log) and arg.has(x_temp):
+                    x_transform = f"ln({x_var})"
+                    break
+
+        # Power transforms (x², x³, etc.) - but not if it's a reciprocal
+        if rhs.has(x_temp ** 2) and not rhs.has(1 / x_temp):
+            x_transform = f"{x_var}²"
+        elif rhs.has(x_temp ** 3):
+            x_transform = f"{x_var}³"
+        elif rhs.has(x_temp ** 4):
+            x_transform = f"{x_var}⁴"
+
+        # Reciprocal (1/x)
+        if rhs.has(1 / x_temp):
+            x_transform = f"1/{x_var}"
+
+        return x_transform, y_transform
+
+    def _identify_meanings(self, linearised_eq, original_eq, x_var, y_var, find_var):
+        """Identify what the gradient and intercept represent."""
+        x_temp, y_temp = sp.symbols("x y")
+
+        # Get the linearised equation structure
+        lhs = linearised_eq.lhs
+        rhs = linearised_eq.rhs
+
+        # Extract gradient and intercept from y = mx + c form
+        try:
+            # Expand and simplify the RHS
+            rhs_expanded = sp.expand(rhs)
+
+            # For reciprocal equations like V = hc/(e*λ), we have V = (hc/e)*(1/λ)
+            # The RHS might be a fraction, so we need to handle that
+
+            # Check if RHS has 1/x_temp term
+            if rhs.has(1 / x_temp):
+                # Extract the coefficient of 1/x_temp
+                # Rewrite as multiplication: a/x = a*(1/x)
+                rhs_rewritten = rhs.rewrite(sp.Mul)
+
+                # Try to extract coefficient
+                try:
+                    grad_coeff = rhs.coeff(1 / x_temp, 1)
+                    if grad_coeff is None or grad_coeff == 0:
+                        # Try alternative extraction
+                        grad_coeff = sp.simplify(rhs * x_temp)
+                except:
+                    grad_coeff = sp.simplify(rhs * x_temp)
+
+                const_term = 0  # Reciprocal equations typically have no constant
+            else:
+                # Regular linear form: mx + c
+                # Collect terms by x_temp
+                grad_coeff = rhs_expanded.coeff(x_temp, 1)
+                if grad_coeff is None:
+                    grad_coeff = 0
+
+                # Extract constant term (the intercept)
+                const_term = rhs_expanded.coeff(x_temp, 0)
+                if const_term is None:
+                    const_term = 0
+
+            # Convert back to original symbols for display
+            reverse_map = {x_temp: sp.Symbol(x_var), y_temp: sp.Symbol(y_var)}
+            grad_coeff_original = grad_coeff.subs(reverse_map) if grad_coeff != 0 else grad_coeff
+            const_term_original = const_term.subs(reverse_map) if const_term != 0 else const_term
+
+            # Create meaningful descriptions
+            if grad_coeff_original != 0:
+                # Simplify and format nicely
+                grad_simplified = sp.simplify(grad_coeff_original)
+                grad_meaning = sp.pretty(grad_simplified, use_unicode=False)
+                # Remove excessive whitespace
+                grad_meaning = " ".join(grad_meaning.split())
+            else:
+                grad_meaning = "0"
+
+            if const_term_original != 0:
+                const_simplified = sp.simplify(const_term_original)
+                int_meaning = sp.pretty(const_simplified, use_unicode=False)
+                int_meaning = " ".join(int_meaning.split())
+            else:
+                int_meaning = "0"
+
+            # Add context based on equation type
+            if original_eq.linearisation_type == "exponential":
+                if original_eq.transform_info:
+                    grad_meaning = original_eq.transform_info.get("gradient_meaning", grad_meaning)
+                    int_meaning = original_eq.transform_info.get("intercept_meaning", int_meaning)
+
+            # If find_var is specified, mention it
+            if find_var:
+                if find_var in str(grad_coeff_original):
+                    grad_meaning += f" (contains {find_var})"
+                if find_var in str(const_term_original):
+                    int_meaning += f" (contains {find_var})"
+
+            return grad_meaning, int_meaning
+
+        except Exception as e:
+            # Fallback to generic terms
+            print(f"Error in _identify_meanings: {e}")  # Debug
+            grad_meaning = "gradient"
+            int_meaning = "y-intercept"
+
+            if original_eq.linearisation_type == "exponential" and original_eq.transform_info:
+                grad_meaning = original_eq.transform_info.get("gradient_meaning", "gradient")
+                int_meaning = original_eq.transform_info.get("intercept_meaning", "y-intercept")
+
+            if find_var:
+                int_meaning += f" (can be used to find {find_var})"
+
+            return grad_meaning, int_meaning
+
+    def _display_linear_result(self, linearised_eq, x_var, y_var, find_var=None,
+                               x_transform=None, y_transform=None,
+                               grad_meaning=None, int_meaning=None):
+        """Display the linearised equation and plotting instructions."""
+        # Show the frame
+        self.linearised_display_frame.pack(fill="both", expand=True, pady=(10, 15))
+
+        # Display equation
+        eq_str = sp.pretty(linearised_eq, use_unicode=True)
+        self.linearised_equation_label.config(text=eq_str)
+
+        # Display plotting information
+        if x_transform is None:
+            x_transform = x_var
+        if y_transform is None:
+            y_transform = y_var
+        if grad_meaning is None:
+            grad_meaning = "gradient"
+        if int_meaning is None:
+            int_meaning = "y-intercept"
+
+        x_meaning = self.selected_equation.variables.get(x_var, x_var)
+        y_meaning = self.selected_equation.variables.get(y_var, y_var)
+
+        info_text = "Plotting Instructions:\n\n"
+        info_text += f"📊 X-axis: {x_transform}\n"
+        info_text += f"   ({x_meaning})\n\n"
+        info_text += f"📊 Y-axis: {y_transform}\n"
+        info_text += f"   ({y_meaning})\n\n"
+        info_text += f"📈 Gradient represents: {grad_meaning}\n\n"
+        info_text += f"📍 Y-intercept represents: {int_meaning}"
+
+        if find_var:
+            info_text += f"\n\n🎯 You can find {find_var} from the graph"
+
+        self.linearised_info_label.config(text=info_text)
 
     @staticmethod
     def linearise(equation):
-        x, y = sp.symbols("x y")
-
         """
         Linearise common non-linear functions for straight-line graphs.
 
         Supported transformations:
-        - Exponential: y = a*exp(b*x) + c -> ln(y - c) = ln(a) + b*x
-        - Reciprocal: y = a/x + c -> remains y = a/x + c (already linear in 1/x)
-        - Power/Polynomial: y = a*x^n + c -> remains unchanged (linear in x^n)
+        - Exponential: y = a*exp(b*x) -> ln(y) = ln(a) + b*x
+        - Power: y = a*x^n -> y vs x^n is linear (keep as is)
+        - Reciprocal: y = a/x -> y vs 1/x is linear (keep as is)
 
-        Accepts equations in the form of SymPy Eq objects or expressions (assumes = 0).
-        Handles cases where y is not isolated, such as:
-        - 2*y = x^2 + 3
-        - y^2 = x + c
-        - a*y^n = b*x^m + c
-
-        All other forms are kept unchanged as they're already
-        linear in the transformed variables.
+        Accepts equations in the form of SymPy Eq objects or expressions.
         """
+        x, y = sp.symbols("x y")
 
         # Convert to equation if just an expression is passed
         if not isinstance(equation, sp.Eq):
             expr = equation
-            # Try to determine if it's meant to be y = expr or expr = 0
             if y in expr.free_symbols:
-                # Check if it's already solved for y
                 if expr.is_Add or expr.is_Mul or expr.is_Pow:
                     equation = sp.Eq(y, expr)
                 else:
                     equation = sp.Eq(expr, 0)
             else:
-                # No y in expression, treat as y = expr
                 equation = sp.Eq(y, expr)
 
         lhs = equation.lhs
         rhs = equation.rhs
 
-        # Determine which side contains y and which contains the main expression
+        # Determine which side contains y
         if y in lhs.free_symbols and y not in rhs.free_symbols:
             y_side = lhs
             expr_side = rhs
         elif y in rhs.free_symbols and y not in lhs.free_symbols:
-            # Swap to keep y on left
             y_side = rhs
             expr_side = lhs
         else:
-            # Both sides have y or neither side has y, return unchanged
             return equation
 
-        # Check if the expression side (without y) has exponential
-        if expr_side.has(sp.exp):
-            c, rest = expr_side.as_coeff_Add()
-            if rest.has(sp.exp):
-                coeff, exp_term = rest.as_coeff_Mul()
-                if isinstance(exp_term, sp.exp):
-                    b = exp_term.args[0]
-                else:
-                    b = 1
-                # Apply transformation: ln(y_side - c) = ln(coeff) + b
-                return sp.Eq(sp.log(y_side - c), sp.log(coeff) + b)
-            else:
-                return sp.Eq(y_side, expr_side)
+        # If y is not alone (e.g., e*y = ...), solve for y
+        if y_side != y:
+            try:
+                # Solve the equation for y
+                solved = sp.solve(equation, y)
+                if solved and len(solved) > 0:
+                    # Take the first solution
+                    expr_side = solved[0]
+                    y_side = y
+            except:
+                # If solve fails, continue with original
+                pass
 
-        # Check for reciprocal in expression side
-        if expr_side.has(1 / x):
+        # Check for exponential: Handle forms like a*exp(b*x), I0*exp(-mu*x)
+        if expr_side.has(sp.exp):
+            # Try to extract the exponential and its coefficient
+            # For I0*exp(-mu*x), we want to get I0 and exp(-mu*x) separately
+
+            # Find all exp terms
+            exp_terms = [term for term in sp.preorder_traversal(expr_side) if isinstance(term, sp.exp)]
+
+            if exp_terms:
+                # Get the first (usually only) exp term
+                exp_term = exp_terms[0]
+                exponent = exp_term.args[0]  # Get what's inside exp()
+
+                # Try to extract coefficient (everything divided by the exp term)
+                try:
+                    coefficient = sp.simplify(expr_side / exp_term)
+
+                    # If y_side is just y, apply log to both sides
+                    if y_side == y:
+                        # y = coeff * exp(exponent) -> ln(y) = ln(coeff) + exponent
+                        return sp.Eq(sp.log(y), sp.log(coefficient) + exponent)
+                    else:
+                        # More complex y_side - still apply log
+                        return sp.Eq(sp.log(y_side), sp.log(coefficient) + exponent)
+                except:
+                    # If extraction fails, return as-is
+                    pass
+
             return sp.Eq(y_side, expr_side)
 
-        # All other cases (power, polynomial, linear, or y^n forms) -> keep unchanged
-        # This includes: y = x^n, 2*y = x^2, y^2 = x + c, etc.
-        return sp.Eq(y_side, expr_side)
+        # For power equations (y = a*x^n), reciprocals (y = a/x), and linear equations
+        # These are ALREADY linear in the transformed variable (x^n or 1/x)
+        # So we just return them as-is
+        # The _identify_transforms function will detect x² or 1/x and label axes accordingly
 
+        return sp.Eq(y_side, expr_side)
 
     def _clear_placeholder(self, event):
         if self.search_entry.get() == self.search_placeholder:
@@ -436,9 +1236,13 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1000x600")
     root.title("LineaX – Analysis Method")
-    # AnalysisMethodScreen(root).pack(fill="both", expand=True)
+
+
     class DummyManager:
         def show(self, *_): pass
+
         def back(self): pass
+
+
     AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
     root.mainloop()

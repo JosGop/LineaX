@@ -98,14 +98,27 @@ class NonLinearGraph(Graph):
     def calculate_coeffs(self):
         pass
 
+
+
 class ScientificEquation(object):
     def __init__(self, original_equation: str):
         self.original_equation = original_equation
+
+        # Filled after linearisation
         self.linearised_equation = None
+
+        # Axis symbols
         self.y = None
-        self.m = None
         self.x = None
+
+        # Linear constants
+        self.m = None
         self.c = None
+
+        # Optional explanations
+        self.m_meaning = None
+        self.c_meaning = None
+
 
     def linearise(self):
         pass
