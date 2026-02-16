@@ -10,6 +10,7 @@ from sympy.parsing.sympy_parser import (
     implicit_multiplication_application
 )
 from DataTransform import DataTransformer, identify_required_transformations
+from LinearGraphDisplay import GraphResultsScreen
 
 TRANSFORMS = standard_transformations + (
     implicit_multiplication_application,
@@ -241,7 +242,8 @@ class AnalysisMethodScreen(tk.Frame):
             bg="#059669",
             fg="white",
             font=("Segoe UI", 11, "bold"),
-            cursor="hand2"
+            cursor="hand2",
+            command=self.generate_graph
         )
 
     def create_automated_panel(self, parent):
@@ -873,6 +875,29 @@ class AnalysisMethodScreen(tk.Frame):
         # Unpack result
         linearised_eq, x_var, y_var, x_transform, y_transform, grad_meaning, int_meaning = result
 
+        linearised_eq, x_var, y_var, x_transform, y_transform, grad_meaning, int_meaning = result
+
+        # Transform the data if transformer is available
+        if self.data_transformer is not None:
+            try:
+                self.transformed_data = self.data_transformer.transform_for_linearisation(
+                    x_transform=x_transform,
+                    y_transform=y_transform,
+                    x_var=x_var,
+                    y_var=y_var
+                )
+
+                # Update manager with transformed data
+                self.manager.set_data(self.transformed_data)
+
+            except ValueError as e:
+                messagebox.showerror(
+                    "Transformation Error",
+                    f"Could not transform data: {str(e)}\n\n"
+                    f"Please check your data values are suitable for this transformation."
+                )
+                return
+
         # Store in scientific equation object using the simple structure
         self.scientific_equation.linearised_equation = str(linearised_eq)
         self.scientific_equation.x = x_transform  # e.g., "x" or "ln(x)"
@@ -894,6 +919,87 @@ class AnalysisMethodScreen(tk.Frame):
 
         # Show generate graph button at the bottom
         self.generate_graph_button.pack(fill="x", pady=(15, 0))
+
+    def generate_graph(self):
+        """
+        Generate the linear graph and navigate to GraphResults screen.
+        Called when user clicks 'Generate Linear Graph' button.
+        """
+        # Check if we have linearised data
+        if self.transformed_data is None:
+            messagebox.showwarning(
+                "No Linearised Data",
+                "Please linearise an equation first before generating the graph."
+            )
+            return
+
+        # Extract equation information for the next screen
+        if self.selected_equation:
+            # Determine what the gradient and intercept represent
+            gradient_var, gradient_units = self._extract_gradient_info()
+            intercept_var, intercept_units = self._extract_intercept_info()
+
+            equation_info = {
+                'name': self.selected_equation.name,
+                'gradient_variable': gradient_var,
+                'gradient_units': gradient_units,
+                'intercept_variable': intercept_var,
+                'intercept_units': intercept_units
+            }
+        else:
+            # Fallback for custom equations
+            equation_info = {
+                'name': 'Custom Linear Equation',
+                'gradient_variable': 'm',
+                'gradient_units': '',
+                'intercept_variable': 'c',
+                'intercept_units': ''
+            }
+
+        # Store equation info in manager
+        self.manager.set_equation_info(equation_info)
+
+        # The transformed data is already stored in manager from _linearise_equation
+        # Now navigate to GraphResults screen
+        self.manager.show(GraphResultsScreen)
+
+    def _extract_gradient_info(self):
+        """Extract gradient variable name and units from selected equation."""
+        if not self.selected_equation:
+            return 'm', ''
+
+        # Use the m_meaning from scientific_equation if available
+        if self.scientific_equation and self.scientific_equation.m_meaning:
+            gradient_var = self.scientific_equation.m_meaning
+        else:
+            gradient_var = 'gradient'
+
+        # Try to infer units (this is simplified - you may want to expand)
+        gradient_units = ''  # Default
+
+        # For common equations, set appropriate units
+        if 'decay' in self.selected_equation.name.lower() or 'λ' in gradient_var:
+            gradient_units = 's⁻¹'
+        elif 'attenuation' in self.selected_equation.name.lower() or 'μ' in gradient_var:
+            gradient_units = 'm⁻¹'
+
+        return gradient_var, gradient_units
+
+    def _extract_intercept_info(self):
+        """Extract intercept variable name and units from selected equation."""
+        if not self.selected_equation:
+            return 'c', ''
+
+        # Use the c_meaning from scientific_equation if available
+        if self.scientific_equation and self.scientific_equation.c_meaning:
+            intercept_var = self.scientific_equation.c_meaning
+        else:
+            intercept_var = 'intercept'
+
+        # Intercept units are often empty for log transformations
+        intercept_units = ''
+
+        return intercept_var, intercept_units
 
     def _identify_xy_vars(self) -> Tuple[str, str]:
         """
@@ -1241,6 +1347,8 @@ class AnalysisMethodScreen(tk.Frame):
         if not self.search_entry.get().strip():
             self.search_entry.insert(0, self.search_placeholder)
             self.search_entry.config(fg="#9ca3af")
+
+
 
 
 if __name__ == "__main__":

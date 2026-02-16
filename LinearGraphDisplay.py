@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from LineaX_Classes import InputData, LinearGraph
-from ChartCustomization import ChartElementsPopup
+from GraphSettings import ChartElementsPopup
 from GradientAnalysis import GradientAnalysisScreen
 from typing import Optional, Tuple, Dict
 
