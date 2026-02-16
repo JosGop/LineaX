@@ -1,5 +1,5 @@
 """
-AutomatedGraphFitScreen.py - Automated Curve Fitting Screen
+AutomatedGraphDisplay.py - Automated Curve Fitting Screen
 
 This screen displays automated curve fitting for non-linear models with Excel-style
 chart customization. Matches the layout and functionality of LinearGraphDisplay.py.
@@ -59,7 +59,7 @@ def sine(x, a, b, c, d):
     return a * np.sin(b * (x - c)) + d
 
 
-class AutomatedGraphFitScreen(tk.Frame):
+class AutomatedGraphResultsScreen(tk.Frame):
     def __init__(self, parent, manager):
         super().__init__(parent, bg="#f5f6f8")
         self.manager = manager

@@ -17,7 +17,7 @@ from NumberFormatting import format_number, format_number_with_uncertainty
 from typing import Optional, Tuple, Dict
 
 
-class GraphResultsScreen(tk.Frame):
+class LinearGraphResultsScreen(tk.Frame):
     def __init__(self, parent, manager):
         super().__init__(parent, bg="#f5f6f8")
         self.manager = manager

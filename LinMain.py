@@ -2,7 +2,7 @@ import tkinter as tk
 from ManagingScreen import ScreenManager
 from DataInput import DataInputScreen
 from AnalysisMethod import AnalysisMethodScreen
-from LinearGraphDisplay import GraphResultsScreen
+from LinearGraphDisplay import LinearGraphResultsScreen
 from GradientAnalysis import GradientAnalysisScreen
 
 root = tk.Tk()

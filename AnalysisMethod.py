@@ -10,8 +10,8 @@ from sympy.parsing.sympy_parser import (
     implicit_multiplication_application
 )
 from DataTransform import DataTransformer, identify_required_transformations
-from LinearGraphDisplay import GraphResultsScreen
-from AutomatedGraphFitScreen import AutomatedGraphFitScreen
+from LinearGraphDisplay import LinearGraphResultsScreen
+from AutomatedGraphDisplay import AutomatedGraphResultsScreen
 
 TRANSFORMS = standard_transformations + (
     implicit_multiplication_application,
@@ -431,7 +431,7 @@ class AnalysisMethodScreen(tk.Frame):
             return
 
         # Navigate to AutomatedGraphFitScreen
-        self.manager.show(AutomatedGraphFitScreen)
+        self.manager.show(AutomatedGraphResultsScreen)
 
     def _on_search(self, event):
         query = self.search_entry.get()
@@ -1167,7 +1167,7 @@ class AnalysisMethodScreen(tk.Frame):
 
         # The transformed data is already stored in manager from _linearise_equation
         # Now navigate to GraphResults screen
-        self.manager.show(GraphResultsScreen)
+        self.manager.show(LinearGraphResultsScreen)
 
     def _extract_gradient_info(self):
         """Extract gradient variable name and units from selected equation."""
