@@ -1,14 +1,15 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from Equations import *
-from LineaX_Classes import ScientificEquation
-import ManagingScreen
+from LineaX_Classes import ScientificEquation, InputData
+from ManagingScreen import *
 import sympy as sp
 from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
     implicit_multiplication_application
 )
+from DataTransform import DataTransformer, identify_required_transformations
 
 TRANSFORMS = standard_transformations + (
     implicit_multiplication_application,
@@ -26,7 +27,28 @@ class AnalysisMethodScreen(tk.Frame):
         # Track selected variables
         self.selected_vars = set()
 
+        # Data management
+        self.raw_data: InputData | None = None
+        self.transformed_data: InputData | None = None
+        self.data_transformer: DataTransformer | None = None
+
+        # Retrieve raw data from manager
+        self._load_data_from_manager()
+
         self.create_layout()
+
+    def _load_data_from_manager(self):
+        """Load the raw InputData from the screen manager."""
+        self.raw_data = self.manager.get_data()
+
+        if self.raw_data is None:
+            messagebox.showwarning(
+                "No Data",
+                "No data was found. Please go back and input your data."
+            )
+        else:
+            # Initialize transformer with raw data
+            self.data_transformer = DataTransformer(self.raw_data)
 
     def create_layout(self):
         nav_bar = tk.Frame(self, bg="#f5f6f8")
@@ -65,7 +87,7 @@ class AnalysisMethodScreen(tk.Frame):
         self.create_automated_panel(inner)
 
     def create_linear_panel(self, parent):
-        _, panel, _, _ = ManagingScreen.make_scrollable(
+        _, panel, _, _ = make_scrollable(
             parent,
             row=0,
             column=0,
@@ -118,7 +140,7 @@ class AnalysisMethodScreen(tk.Frame):
         self.equation_canvas.pack(fill="x", padx=10, pady=10)
 
         # Selected variables display
-        tk.Label(panel, text="Variables to Measure:", bg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w",
+        tk.Label(panel, text="Variables Measured:", bg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w",
                                                                                                       pady=(10, 5))
 
         self.selected_vars_display = tk.Label(
@@ -494,7 +516,7 @@ class AnalysisMethodScreen(tk.Frame):
     def _update_selected_vars_display(self):
         """Update the display showing selected variables."""
         if len(self.selected_vars) == 0:
-            text = "Click on variables in the equation above"
+            text = "Click on variables in the equation above that you have measured in your experiment"
             bg = "#fffbeb"
             fg = "#92400e"
         elif len(self.selected_vars) == 1:
@@ -776,7 +798,7 @@ class AnalysisMethodScreen(tk.Frame):
             )
             return
 
-        # Try both orderings and analyze which gives better linearisation
+            # Try both orderings and analyze which gives better linearisation
         result1 = self._attempt_linearisation(equation, var1, var2, find_sym)
         result2 = self._attempt_linearisation(equation, var2, var1, find_sym)
 
@@ -872,6 +894,44 @@ class AnalysisMethodScreen(tk.Frame):
 
         # Show generate graph button at the bottom
         self.generate_graph_button.pack(fill="x", pady=(15, 0))
+
+    def _identify_xy_vars(self) -> Tuple[str, str]:
+        """
+        Identify which selected variables should be x and y.
+
+        Returns:
+            Tuple of (x_variable_name, y_variable_name)
+        """
+        # Convert selected vars set to list for indexing
+        vars_list = list(self.selected_vars)
+
+        if len(vars_list) < 2:
+            raise ValueError("Need at least 2 variables selected")
+
+        # Simple heuristic: first selected is x, second is y
+        # You could enhance this with user input or smart detection
+        return vars_list[0], vars_list[1]
+
+    def get_current_data(self) -> InputData:
+        """
+        Get the current data to use for analysis.
+
+        Returns transformed data if transformation was applied,
+        otherwise returns raw data.
+        """
+        if self.transformed_data is not None:
+            return self.transformed_data
+        return self.raw_data
+
+    def revert_to_raw_data(self):
+        """Revert to using raw untransformed data."""
+        if self.data_transformer is not None:
+            self.transformed_data = None
+            self.manager.set_data(self.raw_data)
+            messagebox.showinfo(
+                "Data Reverted",
+                "Data has been reverted to original raw measurements."
+            )
 
     def _attempt_linearisation(self, equation, x_var, y_var, find_var):
         """
@@ -1112,12 +1172,7 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Linearise common non-linear functions for straight-line graphs.
 
-        Supported transformations:
-        - Exponential: y = a*exp(b*x) -> ln(y) = ln(a) + b*x
-        - Power: y = a*x^n -> y vs x^n is linear (keep as is)
-        - Reciprocal: y = a/x -> y vs 1/x is linear (keep as is)
-
-        Accepts equations in the form of SymPy Eq objects or expressions.
+        [Keep existing linearise implementation]
         """
         x, y = sp.symbols("x y")
 
@@ -1148,50 +1203,32 @@ class AnalysisMethodScreen(tk.Frame):
         # If y is not alone (e.g., e*y = ...), solve for y
         if y_side != y:
             try:
-                # Solve the equation for y
                 solved = sp.solve(equation, y)
                 if solved and len(solved) > 0:
-                    # Take the first solution
                     expr_side = solved[0]
                     y_side = y
             except:
-                # If solve fails, continue with original
                 pass
 
-        # Check for exponential: Handle forms like a*exp(b*x), I0*exp(-mu*x)
+        # Check for exponential
         if expr_side.has(sp.exp):
-            # Try to extract the exponential and its coefficient
-            # For I0*exp(-mu*x), we want to get I0 and exp(-mu*x) separately
-
-            # Find all exp terms
             exp_terms = [term for term in sp.preorder_traversal(expr_side) if isinstance(term, sp.exp)]
 
             if exp_terms:
-                # Get the first (usually only) exp term
                 exp_term = exp_terms[0]
-                exponent = exp_term.args[0]  # Get what's inside exp()
+                exponent = exp_term.args[0]
 
-                # Try to extract coefficient (everything divided by the exp term)
                 try:
                     coefficient = sp.simplify(expr_side / exp_term)
 
-                    # If y_side is just y, apply log to both sides
                     if y_side == y:
-                        # y = coeff * exp(exponent) -> ln(y) = ln(coeff) + exponent
                         return sp.Eq(sp.log(y), sp.log(coefficient) + exponent)
                     else:
-                        # More complex y_side - still apply log
                         return sp.Eq(sp.log(y_side), sp.log(coefficient) + exponent)
                 except:
-                    # If extraction fails, return as-is
                     pass
 
             return sp.Eq(y_side, expr_side)
-
-        # For power equations (y = a*x^n), reciprocals (y = a/x), and linear equations
-        # These are ALREADY linear in the transformed variable (x^n or 1/x)
-        # So we just return them as-is
-        # The _identify_transforms function will detect x² or 1/x and label axes accordingly
 
         return sp.Eq(y_side, expr_side)
 
@@ -1212,13 +1249,13 @@ if __name__ == "__main__":
     root.title("LineaX – Analysis Method")
 
 
-    class DummyManager:
-        def show(self, *_): pass
-
-        def back(self): pass
-
-
-    AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
-    # manager = ScreenManager(root)
-    # manager.show(AnalysisMethodScreen)
+    # class DummyManager:
+    #     def show(self, *_): pass
+    #
+    #     def back(self): pass
+    #
+    #
+    # AnalysisMethodScreen(root, DummyManager()).pack(fill="both", expand=True)
+    manager = ScreenManager(root)
+    manager.show(AnalysisMethodScreen)
     root.mainloop()

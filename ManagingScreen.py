@@ -51,6 +51,7 @@ def make_scrollable(parent, row, column, padx=(0, 0), pady=0, bg="white", panel_
 
     return panel_container, panel, canvas, scrollbar
 
+
 class ScreenManager:
     def __init__(self, root):
         self.root = root
@@ -59,6 +60,12 @@ class ScreenManager:
 
         # Shared application data
         self.input_data = None
+
+        # Equation information for linearisation
+        self.equation_info = None
+
+        # Analysis results from GraphResultsScreen
+        self.analysis_results = None
 
     def set_data(self, input_data):
         """
@@ -71,6 +78,50 @@ class ScreenManager:
         Returns the stored InputData instance.
         """
         return self.input_data
+
+    def set_equation_info(self, equation_info):
+        """
+        Stores equation information from AnalysisMethod screen.
+
+        Args:
+            equation_info: Dict containing:
+                - name: Equation name
+                - gradient_variable: What the gradient represents
+                - gradient_units: Units for gradient
+                - intercept_variable: What the intercept represents
+                - intercept_units: Units for intercept
+        """
+        self.equation_info = equation_info
+
+    def get_equation_info(self):
+        """
+        Returns stored equation information.
+        """
+        return self.equation_info
+
+    def set_analysis_results(self, analysis_results):
+        """
+        Stores analysis results from GraphResultsScreen.
+
+        Args:
+            analysis_results: Dict containing:
+                - equation_name: Name of equation used
+                - gradient: Gradient value
+                - gradient_uncertainty: Gradient uncertainty
+                - gradient_variable: Variable name for gradient
+                - gradient_units: Units for gradient
+                - intercept: Intercept value
+                - intercept_uncertainty: Intercept uncertainty
+                - intercept_variable: Variable name for intercept
+                - intercept_units: Units for intercept
+        """
+        self.analysis_results = analysis_results
+
+    def get_analysis_results(self):
+        """
+        Returns stored analysis results.
+        """
+        return self.analysis_results
 
     def show(self, screen_class):
         if self.current_screen is not None:
@@ -87,5 +138,3 @@ class ScreenManager:
         self.current_screen.pack_forget()
         self.current_screen = self.stack.pop()
         self.current_screen.pack(fill="both", expand=True)
-
-

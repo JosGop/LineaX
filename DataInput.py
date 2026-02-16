@@ -12,6 +12,7 @@ class DataInputScreen(tk.Frame):
         self.manager = manager
         self.parent = parent
         self.df = None
+        self.input_data = None
         self.configure(padx=20, pady=15)
         self.create_layout()
 
@@ -338,30 +339,91 @@ class DataInputScreen(tk.Frame):
         )
 
     def collect_file_data(self):
-        """
-        Uses read_csv_file or read_excel from LineaX_Classes.
-        Stores data as numpy arrays inside InputData.
-        """
+        """Collect data from imported CSV/Excel file."""
+        if self.df is None:
+            raise ValueError("No file has been imported.")
 
-        x_idx = self.df.columns.get_loc(self.x_col.get()) + 1
-        y_idx = self.df.columns.get_loc(self.y_col.get()) + 1
+        x_col_name = self.x_col.get()
+        y_col_name = self.y_col.get()
+        x_err_name = self.x_err_col.get()
+        y_err_name = self.y_err_col.get()
 
-        x_err = None if self.x_err_col.get() == "None" else self.df.columns.get_loc(self.x_err_col.get()) + 1
-        y_err = None if self.y_err_col.get() == "None" else self.df.columns.get_loc(self.y_err_col.get()) + 1
+        if not x_col_name or not y_col_name:
+            raise ValueError("Please select both X and Y columns.")
 
-        data = InputData()
+        # Get column indices (1-based)
+        x_idx = list(self.df.columns).index(x_col_name) + 1
+        y_idx = list(self.df.columns).index(y_col_name) + 1
 
-        if self.filepath.endswith(".csv"):
-            data.read_csv_file(self.filepath, x_idx, y_idx, x_err, y_err)
-        else:
-            data.read_excel(self.filepath, x_idx, y_idx, x_err, y_err)
+        # Get error column indices if specified
+        x_err_idx = None
+        y_err_idx = None
+        if x_err_name != "None":
+            x_err_idx = list(self.df.columns).index(x_err_name) + 1
+        if y_err_name != "None":
+            y_err_idx = list(self.df.columns).index(y_err_name) + 1
 
-        data.x_values = np.array(data.x_values, dtype=float)
-        data.y_values = np.array(data.y_values, dtype=float)
-        data.x_error = np.array(data.x_error, dtype=float)
-        data.y_error = np.array(data.y_error, dtype=float)
+        # Create InputData instance
+        self.input_data = InputData()
 
-        self.input_data = data
+        # Determine file type and read accordingly
+        if hasattr(self, 'file_path'):
+            if self.file_path.endswith('.csv'):
+                self.input_data.read_csv_file(
+                    self.file_path,
+                    x_idx,
+                    y_idx,
+                    x_err_idx,
+                    y_err_idx
+                )
+            else:  # Excel file
+                self.input_data.read_excel(
+                    self.file_path,
+                    x_idx,
+                    y_idx,
+                    x_err_idx,
+                    y_err_idx
+                )
+
+    def collect_manual_data(self):
+        """Collect data from manual entry fields."""
+        manual_data = self.get_manual_data()
+
+        if manual_data is None:
+            raise ValueError("Please enter valid numeric data in at least one row.")
+
+        # Remove None values
+        x_vals = [v for v in manual_data["X"] if v is not None]
+        y_vals = [v for v in manual_data["Y"] if v is not None]
+        x_err_vals = [v for v in manual_data["X_err"] if v is not None]
+        y_err_vals = [v for v in manual_data["Y_err"] if v is not None]
+
+        if len(x_vals) != len(y_vals):
+            raise ValueError("X and Y must have the same number of values.")
+
+        if len(x_vals) < 3:
+            raise ValueError("At least 3 data points are required.")
+
+        # Get titles from header entries
+        x_title = self.header_entries[0].get().strip()
+        y_title = self.header_entries[2].get().strip()
+
+        # Use defaults if empty
+        if not x_title or x_title == "X Val":
+            x_title = "X"
+        if not y_title or y_title == "Y Val":
+            y_title = "Y"
+
+        # Create InputData instance
+        self.input_data = InputData()
+        self.input_data.get_manual_data(
+            x_vals,
+            y_vals,
+            x_err_vals if x_err_vals else None,
+            y_err_vals if y_err_vals else None,
+            x_title,
+            y_title
+        )
 
     def create_manual_panel(self, parent):
         """Create right panel for manual data entry"""
