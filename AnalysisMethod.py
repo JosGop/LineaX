@@ -11,6 +11,7 @@ from sympy.parsing.sympy_parser import (
 )
 from DataTransform import DataTransformer, identify_required_transformations
 from LinearGraphDisplay import GraphResultsScreen
+from AutomatedGraphFitScreen import AutomatedGraphFitScreen
 
 TRANSFORMS = standard_transformations + (
     implicit_multiplication_application,
@@ -421,12 +422,16 @@ class AnalysisMethodScreen(tk.Frame):
 
     def _generate_automated_graph(self):
         """Generate graph with automated model selection."""
-        messagebox.showinfo(
-            "Coming Soon",
-            "Automated model selection feature is currently under development.\n\n"
-            "For now, please use the Linear Graph Analysis panel to manually "
-            "select and linearise equations."
-        )
+        # Check if we have data
+        if self.raw_data is None:
+            messagebox.showwarning(
+                "No Data",
+                "Please go back and input your data first."
+            )
+            return
+
+        # Navigate to AutomatedGraphFitScreen
+        self.manager.show(AutomatedGraphFitScreen)
 
     def _on_search(self, event):
         query = self.search_entry.get()

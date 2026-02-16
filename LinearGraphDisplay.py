@@ -13,6 +13,7 @@ import numpy as np
 from LineaX_Classes import InputData, LinearGraph
 from GraphSettings import ChartElementsPopup
 from GradientAnalysis import GradientAnalysisScreen
+from NumberFormatting import format_number, format_number_with_uncertainty
 from typing import Optional, Tuple, Dict
 
 
@@ -21,35 +22,35 @@ class GraphResultsScreen(tk.Frame):
         super().__init__(parent, bg="#f5f6f8")
         self.manager = manager
         self.parent = parent
-        
+
         # Data and analysis results
         self.input_data: Optional[InputData] = None
         self.linear_graph: Optional[LinearGraph] = None
-        
+
         # Equation information
         self.equation_name: Optional[str] = None
         self.gradient_variable: Optional[str] = None
         self.gradient_units: Optional[str] = None
         self.intercept_variable: Optional[str] = None
         self.intercept_units: Optional[str] = None
-        
+
         # Fit results
         self.best_fit_gradient: Optional[float] = None
         self.best_fit_intercept: Optional[float] = None
         self.gradient_uncertainty: Optional[float] = None
         self.intercept_uncertainty: Optional[float] = None
         self.r_squared: Optional[float] = None
-        
+
         # Worst fit results
         self.worst_fit_max_gradient: Optional[float] = None
         self.worst_fit_min_gradient: Optional[float] = None
         self.max_percentage_diff: Optional[float] = None
         self.min_percentage_diff: Optional[float] = None
-        
+
         # Matplotlib figure
         self.figure = None
         self.canvas = None
-        
+
         # Chart customization
         self.chart_elements_popup = None
         self.chart_element_states = {
@@ -63,7 +64,7 @@ class GraphResultsScreen(tk.Frame):
             'best_fit': True,
             'worst_fit': True,
         }
-        
+
         # Load data and perform analysis
         data_loaded = self._load_data_and_analyze()
 
@@ -467,17 +468,17 @@ class GraphResultsScreen(tk.Frame):
         self.create_stat_label(
             inner_best,
             "Gradient:",
-            f"{self.best_fit_gradient:.4e} ± {self.gradient_uncertainty:.4e}"
+            format_number_with_uncertainty(self.best_fit_gradient, self.gradient_uncertainty)
         )
         self.create_stat_label(
             inner_best,
             "Y-intercept:",
-            f"{self.best_fit_intercept:.4e} ± {self.intercept_uncertainty:.4e}"
+            format_number_with_uncertainty(self.best_fit_intercept, self.intercept_uncertainty)
         )
         self.create_stat_label(
             inner_best,
             "R² value:",
-            f"{self.r_squared:.6f}"
+            format_number(self.r_squared, 6)
         )
 
         # Worst Fit Max Panel (Red)
@@ -498,7 +499,7 @@ class GraphResultsScreen(tk.Frame):
         self.create_stat_label(
             inner_max,
             "Gradient:",
-            f"{self.worst_fit_max_gradient:.4e}"
+            format_number(self.worst_fit_max_gradient)
         )
         self.create_stat_label(
             inner_max,
@@ -531,7 +532,7 @@ class GraphResultsScreen(tk.Frame):
         self.create_stat_label(
             inner_min,
             "Gradient:",
-            f"{self.worst_fit_min_gradient:.4e}"
+            format_number(self.worst_fit_min_gradient)
         )
         self.create_stat_label(
             inner_min,

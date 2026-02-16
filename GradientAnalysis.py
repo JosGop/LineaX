@@ -547,25 +547,57 @@ class GradientAnalysisScreen(tk.Frame):
                 "Invalid Input",
                 "Please enter a valid numerical value.\n\n"
                 "Examples:\n"
-                "• 0.05\n"
-                "• 5.01e-2\n"
-                "• 5.01×10⁻²"
+                "• -0.05\n"
+                "• +5.01e-2\n"
+                "• +5.01*10^-3\n"
+                "• 5.01×10⁻²\n"
+                "• 510.79"
             )
-    
+
     def _parse_scientific_notation(self, text: str) -> float:
         """Parse various formats of scientific notation."""
-        # Replace common unicode characters
-        text = text.replace('×', 'e').replace('x', 'e')
-        text = text.replace('⁻', '-').replace('−', '-')
-        
-        # Remove superscript numbers
-        superscripts = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹', '0123456789')
+        import re
+
+        # Remove spaces
+        text = text.strip().replace(' ', '')
+
+        # Handle leading plus sign
+        if text.startswith('+'):
+            text = text[1:]
+
+        # Replace common unicode characters for multiplication and minus
+        text = text.replace('×', '*').replace('−', '-')
+
+        # Handle superscript numbers
+        superscripts = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻', '0123456789+-')
         text = text.translate(superscripts)
-        
-        # Replace 10^ with e
-        text = text.replace('10^', 'e').replace('10', 'e')
-        
-        return float(text)
+
+        # Handle various scientific notation formats:
+        # 5.01*10^-3 → 5.01e-3
+        # 5.01*10^(-3) → 5.01e-3
+        # 5.01×10⁻³ → 5.01e-3 (already handled above)
+        text = re.sub(r'\*\s*10\s*\^\s*\(?\s*(-?\d+)\s*\)?', r'e\1', text)
+
+        # Handle formats like: 5.01*10-3 (without ^)
+        text = re.sub(r'\*\s*10\s*(-?\d+)', r'e\1', text)
+
+        # Handle simple 'e' or 'E' notation: 5.01e-2 or 5.01E-2
+        # (already valid Python format, no changes needed)
+
+        # Try to convert to float
+        try:
+            return float(text)
+        except ValueError:
+            # If it still fails, try evaluating as a simple expression
+            # This handles cases like: 5.01*10**-3
+            try:
+                # Only allow safe operations
+                if all(c in '0123456789.+-*/()eE' for c in text):
+                    return float(eval(text))
+                else:
+                    raise ValueError("Invalid characters in input")
+            except:
+                raise ValueError(f"Cannot parse '{text}' as a number")
     
     def export_report(self):
         """Export a full analysis report."""
