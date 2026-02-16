@@ -142,7 +142,7 @@ class AnalysisMethodScreen(tk.Frame):
 
         # Selected variables display
         tk.Label(panel, text="Variables Measured:", bg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w",
-                                                                                                      pady=(10, 5))
+                                                                                                    pady=(10, 5))
 
         self.selected_vars_display = tk.Label(
             panel,
@@ -247,17 +247,186 @@ class AnalysisMethodScreen(tk.Frame):
         )
 
     def create_automated_panel(self, parent):
-        panel = tk.Frame(parent, bg="white", padx=20, pady=20)
-        panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        """Create the automated model selection panel with model cards."""
+        _, panel, _, _ = make_scrollable(
+            parent,
+            row=0,
+            column=1,
+            padx=(10, 0),
+            bg="white",
+            panel_kwargs={"padx": 20, "pady": 20},
+        )
 
-        tk.Label(panel, text="Automated Model Selection", font=("Segoe UI", 14, "bold"), bg="white").pack(anchor="w",
-                                                                                                          pady=(0, 15))
+        # Panel title
+        tk.Label(
+            panel,
+            text="Automated Model Selection",
+            font=("Segoe UI", 14, "bold"),
+            bg="white",
+            fg="#0f172a"
+        ).pack(anchor="w", pady=(0, 15))
 
-        models = ["Linear", "Quadratic", "Cubic", "Exponential", "Logarithmic", "Gaussian", "Logistic", "Sinusoidal"]
+        # Subtitle
+        tk.Label(
+            panel,
+            text="Select a model to automatically fit your data",
+            font=("Segoe UI", 9),
+            bg="white",
+            fg="#6b7280"
+        ).pack(anchor="w", pady=(0, 20))
+
+        # Model definitions with equations and descriptions
+        models = [
+            {
+                "name": "Linear",
+                "equation": "y = mx + c",
+                "description": "Straight line relationship",
+                "color": "#3b82f6"
+            },
+            {
+                "name": "Quadratic",
+                "equation": "y = ax² + bx + c",
+                "description": "Parabolic curve",
+                "color": "#8b5cf6"
+            },
+            {
+                "name": "Cubic",
+                "equation": "y = ax³ + bx² + cx + d",
+                "description": "S-shaped or cubic curve",
+                "color": "#ec4899"
+            },
+            {
+                "name": "Exponential",
+                "equation": "y = a·eᵇˣ",
+                "description": "Growth or decay",
+                "color": "#f59e0b"
+            },
+            {
+                "name": "Logarithmic",
+                "equation": "y = a·ln(x) + b",
+                "description": "Logarithmic relationship",
+                "color": "#10b981"
+            },
+            {
+                "name": "Power",
+                "equation": "y = a·xᵇ",
+                "description": "Power law relationship",
+                "color": "#06b6d4"
+            },
+            {
+                "name": "Gaussian",
+                "equation": "y = a·e^(-(x-b)²/(2c²))",
+                "description": "Bell-shaped curve",
+                "color": "#6366f1"
+            },
+            {
+                "name": "Logistic",
+                "equation": "y = L/(1 + e^(-k(x-x₀)))",
+                "description": "S-shaped growth curve",
+                "color": "#84cc16"
+            },
+            {
+                "name": "Sinusoidal",
+                "equation": "y = a·sin(bx + c) + d",
+                "description": "Periodic oscillation",
+                "color": "#f43f5e"
+            }
+        ]
+
+        # Create model cards
         for model in models:
-            tk.Label(panel, text=model, bg="white").pack(anchor="w", pady=2)
+            self._create_model_card(panel, model)
 
-        tk.Button(panel, text="Generate Graph", bg="#0f172a", fg="white").pack(side="bottom", fill="x", pady=(25, 0))
+        # Bottom spacer
+        tk.Frame(panel, bg="white", height=20).pack()
+
+        # Generate Graph button
+        generate_btn = tk.Button(
+            panel,
+            text="Generate Graph",
+            font=("Segoe UI", 11, "bold"),
+            bg="#0f172a",
+            fg="white",
+            padx=30,
+            pady=12,
+            relief="flat",
+            cursor="hand2",
+            command=self._generate_automated_graph
+        )
+        generate_btn.pack(fill="x", pady=(15, 0))
+
+    def _create_model_card(self, parent, model):
+        """Create an individual model card with equation display."""
+        # Card container
+        card = tk.Frame(
+            parent,
+            bg="#f8fafc",
+            relief="solid",
+            bd=1,
+            highlightbackground="#e2e8f0",
+            highlightthickness=1
+        )
+        card.pack(fill="x", pady=8)
+
+        # Inner padding
+        inner = tk.Frame(card, bg="#f8fafc", padx=15, pady=12)
+        inner.pack(fill="both", expand=True)
+
+        # Top row: model name with colored indicator
+        top_row = tk.Frame(inner, bg="#f8fafc")
+        top_row.pack(fill="x", pady=(0, 8))
+
+        # Color indicator
+        color_bar = tk.Frame(
+            top_row,
+            bg=model["color"],
+            width=4,
+            height=20
+        )
+        color_bar.pack(side="left", padx=(0, 10))
+        color_bar.pack_propagate(False)
+
+        # Model name
+        tk.Label(
+            top_row,
+            text=model["name"],
+            font=("Segoe UI", 12, "bold"),
+            bg="#f8fafc",
+            fg="#0f172a"
+        ).pack(side="left")
+
+        # Equation display
+        equation_frame = tk.Frame(inner, bg="white", relief="flat", bd=1)
+        equation_frame.pack(fill="x", pady=(0, 8))
+
+        tk.Label(
+            equation_frame,
+            text=model["equation"],
+            font=("Courier New", 11),
+            bg="white",
+            fg="#1e293b",
+            padx=12,
+            pady=8
+        ).pack(anchor="w")
+
+        # Description
+        tk.Label(
+            inner,
+            text=model["description"],
+            font=("Segoe UI", 9),
+            bg="#f8fafc",
+            fg="#64748b",
+            justify="left"
+        ).pack(anchor="w")
+
+    def _generate_automated_graph(self):
+        """Generate graph with automated model selection."""
+        messagebox.showinfo(
+            "Coming Soon",
+            "Automated model selection feature is currently under development.\n\n"
+            "For now, please use the Linear Graph Analysis panel to manually "
+            "select and linearise equations."
+        )
 
     def _on_search(self, event):
         query = self.search_entry.get()
@@ -824,34 +993,34 @@ class AnalysisMethodScreen(tk.Frame):
             if x_is_transformed and y_is_transformed:
                 score += 10  # Both transformed - not ideal
             elif not x_is_transformed and not y_is_transformed:
-                score += 5  # Neither transformed - okay
+                score += 0  # Neither transformed - BEST for already linear equations
             else:
-                score += 0  # One transformed - ideal
+                score += 2  # One transformed - okay for non-linear equations
 
-            # Prefer Y-axis transformation over X-axis
+            # Prefer Y-axis transformation over X-axis for non-linear equations
             # (e.g., ln(I) vs x is better than I vs ln(x))
             if y_is_transformed:
-                score -= 2
+                score -= 1
             if x_is_transformed:
-                score += 1
+                score += 2
 
             # Additional heuristic: prefer common physics conventions
-            # Independent variables (typically on X-axis): t, x, s, r, d, f, λ, θ
-            # Dependent variables (typically on Y-axis): v, V, F, E, p, I, A, N
-            independent_vars = {'t', 'x', 's', 'r', 'd', 'f', 'λ', 'θ', 'φ', 'ω'}
-            dependent_vars = {'v', 'V', 'F', 'E', 'p', 'I', 'A', 'N', 'Q', 'P', 'T'}
+            # Independent variables (typically on X-axis): t, x, s, r, d, f, λ, θ, I
+            # Dependent variables (typically on Y-axis): v, V, F, E, p, A, N, Q
+            independent_vars = {'t', 'x', 's', 'r', 'd', 'f', 'λ', 'θ', 'φ', 'ω', 'I', 'h', 'L', 'A'}
+            dependent_vars = {'v', 'V', 'F', 'E', 'p', 'A', 'N', 'Q', 'P', 'T', 'W', 'R'}
 
             # Bonus for correct convention
             if x_var in independent_vars:
-                score -= 1  # Good - independent on X
+                score -= 2  # Good - independent on X
             if y_var in dependent_vars:
-                score -= 1  # Good - dependent on Y
+                score -= 2  # Good - dependent on Y
 
             # Penalty for backwards convention
             if x_var in dependent_vars:
-                score += 2  # Bad - dependent on X
+                score += 3  # Bad - dependent on X
             if y_var in independent_vars:
-                score += 2  # Bad - independent on Y
+                score += 3  # Bad - independent on Y
 
             return score
 
@@ -939,12 +1108,39 @@ class AnalysisMethodScreen(tk.Frame):
             gradient_var, gradient_units = self._extract_gradient_info()
             intercept_var, intercept_units = self._extract_intercept_info()
 
+            # Get the variable to find
+            find_var = self.find_var.get() if self.find_var.get() != "None" else None
+
+            # Get constant values entered by user
+            constants = {}
+            for var, entry in self.constant_entries.items():
+                try:
+                    value_str = entry.get().strip()
+                    if value_str:
+                        constants[var] = float(value_str)
+                except ValueError:
+                    pass  # Ignore invalid entries
+
+            # Get measurement units entered by user
+            measurement_units = {}
+            for var, entry in self.unit_entries.items():
+                unit_str = entry.get().strip()
+                if unit_str and unit_str != "SI units":
+                    measurement_units[var] = unit_str
+
             equation_info = {
                 'name': self.selected_equation.name,
                 'gradient_variable': gradient_var,
                 'gradient_units': gradient_units,
                 'intercept_variable': intercept_var,
-                'intercept_units': intercept_units
+                'intercept_units': intercept_units,
+                'find_variable': find_var,  # Variable to solve for
+                'constants': constants,  # Known constant values
+                'measurement_units': measurement_units,  # NEW: User-entered units
+                'gradient_meaning': self.scientific_equation.m_meaning if self.scientific_equation else gradient_var,
+                # Full gradient expression
+                'intercept_meaning': self.scientific_equation.c_meaning if self.scientific_equation else intercept_var
+                # Full intercept expression
             }
         else:
             # Fallback for custom equations
@@ -953,7 +1149,12 @@ class AnalysisMethodScreen(tk.Frame):
                 'gradient_variable': 'm',
                 'gradient_units': '',
                 'intercept_variable': 'c',
-                'intercept_units': ''
+                'intercept_units': '',
+                'find_variable': None,
+                'constants': {},
+                'measurement_units': {},
+                'gradient_meaning': 'm',
+                'intercept_meaning': 'c'
             }
 
         # Store equation info in manager
@@ -1159,17 +1360,29 @@ class AnalysisMethodScreen(tk.Frame):
             # Check if RHS has 1/x_temp term
             if rhs.has(1 / x_temp):
                 # Extract the coefficient of 1/x_temp
-                # Rewrite as multiplication: a/x = a*(1/x)
-                rhs_rewritten = rhs.rewrite(sp.Mul)
+                # The gradient is everything that multiplies 1/x
 
-                # Try to extract coefficient
+                # Method 1: Try to get coefficient directly
                 try:
                     grad_coeff = rhs.coeff(1 / x_temp, 1)
                     if grad_coeff is None or grad_coeff == 0:
-                        # Try alternative extraction
+                        # Method 2: Multiply by x and simplify
                         grad_coeff = sp.simplify(rhs * x_temp)
                 except:
-                    grad_coeff = sp.simplify(rhs * x_temp)
+                    # Method 3: Rewrite as numerator/denominator and extract
+                    try:
+                        # Convert to a single fraction
+                        rhs_as_fraction = sp.together(rhs)
+                        numer, denom = sp.fraction(rhs_as_fraction)
+
+                        # The gradient is numer/denom when denom contains x
+                        if x_temp in denom.free_symbols:
+                            # Cancel out x from denominator to get coefficient
+                            grad_coeff = sp.simplify(numer / (denom / x_temp))
+                        else:
+                            grad_coeff = sp.simplify(rhs * x_temp)
+                    except:
+                        grad_coeff = sp.simplify(rhs * x_temp)
 
                 const_term = 0  # Reciprocal equations typically have no constant
             else:
@@ -1193,15 +1406,39 @@ class AnalysisMethodScreen(tk.Frame):
             if grad_coeff_original != 0:
                 # Simplify and format nicely
                 grad_simplified = sp.simplify(grad_coeff_original)
-                grad_meaning = sp.pretty(grad_simplified, use_unicode=False)
-                # Remove excessive whitespace
+
+                # Format as a fraction if it contains division
+                if isinstance(grad_simplified, sp.Mul):
+                    # Check if any factors are negative powers (division)
+                    numer_factors = []
+                    denom_factors = []
+                    for factor in sp.Mul.make_args(grad_simplified):
+                        if isinstance(factor, sp.Pow) and factor.exp < 0:
+                            # This is in denominator
+                            denom_factors.append(factor.base)
+                        else:
+                            numer_factors.append(factor)
+
+                    if denom_factors:
+                        # Format as fraction: numer/denom
+                        numer_str = '*'.join(str(f) for f in numer_factors) if numer_factors else '1'
+                        denom_str = '*'.join(str(f) for f in denom_factors)
+                        grad_meaning = f"{numer_str}/{denom_str}"
+                    else:
+                        grad_meaning = str(grad_simplified)
+                else:
+                    grad_meaning = str(grad_simplified)
+
+                # Clean up formatting
+                grad_meaning = grad_meaning.replace('**', '^')
                 grad_meaning = " ".join(grad_meaning.split())
             else:
                 grad_meaning = "0"
 
             if const_term_original != 0:
                 const_simplified = sp.simplify(const_term_original)
-                int_meaning = sp.pretty(const_simplified, use_unicode=False)
+                int_meaning = str(const_simplified)
+                int_meaning = int_meaning.replace('**', '^')
                 int_meaning = " ".join(int_meaning.split())
             else:
                 int_meaning = "0"
@@ -1306,7 +1543,27 @@ class AnalysisMethodScreen(tk.Frame):
         else:
             return equation
 
-        # If y is not alone (e.g., e*y = ...), solve for y
+        # Check if equation is already linear (y = mx + c or y = mx form)
+        # Linear means: expr_side is polynomial in x with degree <= 1
+        if expr_side.is_polynomial(x):
+            degree = sp.degree(expr_side, x)
+            if degree <= 1:
+                # Already linear - check if y is alone on the left side
+                if y_side == y:
+                    # Perfect - already in y = mx + c form
+                    return equation
+                else:
+                    # y has a coefficient, solve for y to get y = ... form
+                    try:
+                        solved = sp.solve(equation, y)
+                        if solved and len(solved) > 0:
+                            return sp.Eq(y, solved[0])
+                    except:
+                        pass
+                # If solving fails, return as-is
+                return sp.Eq(y_side, expr_side)
+
+        # If y is not alone and equation is non-linear, solve for y first
         if y_side != y:
             try:
                 solved = sp.solve(equation, y)
@@ -1349,13 +1606,10 @@ class AnalysisMethodScreen(tk.Frame):
             self.search_entry.config(fg="#9ca3af")
 
 
-
-
 if __name__ == "__main__":
     root = tk.Tk()
     root.geometry("1000x600")
     root.title("LineaX – Analysis Method")
-
 
     # class DummyManager:
     #     def show(self, *_): pass

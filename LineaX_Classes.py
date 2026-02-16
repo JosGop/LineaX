@@ -55,10 +55,11 @@ class InputData:
         y_data = [int(val) if isinstance(val, int) else float(val) for val in df.iloc[:, y - 1]]
 
         # get the column titles (names of x and y columns)
-        x_title, y_title = df.columns
+        x_title = df.columns[x - 1]
+        y_title = df.columns[y - 1]
 
-        self.x_values = x_data
-        self.y_values = y_data
+        self.x_values = np.array(x_data, dtype=float)
+        self.y_values = np.array(y_data, dtype=float)
         self.x_error = find_error(x_data, x_err_col)
         self.y_error = find_error(y_data, y_err_col)
         self.x_title = x_title
@@ -86,8 +87,8 @@ class InputData:
                 # take the value from the chosen y column, convert to float, add to list
                 y_data.append(float(row[y_col - 1]))
 
-            self.x_values = x_data
-            self.y_values = y_data
+            self.x_values = np.array(x_data, dtype=float)
+            self.y_values = np.array(y_data, dtype=float)
             self.x_error = find_error(x_data, x_err_col)
             self.y_error = find_error(y_data, y_err_col)
             self.x_title = x_title

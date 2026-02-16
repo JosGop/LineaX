@@ -634,6 +634,9 @@ class GraphResultsScreen(tk.Frame):
 
     def analyze_gradient(self):
         """Navigate to gradient analysis screen with results."""
+        # Get equation info from manager
+        equation_info = self.manager.get_equation_info() if hasattr(self.manager, 'get_equation_info') else {}
+
         # Store analysis results for next screen
         analysis_data = {
             'equation_name': self.equation_name,
@@ -644,7 +647,13 @@ class GraphResultsScreen(tk.Frame):
             'intercept': self.best_fit_intercept,
             'intercept_uncertainty': self.intercept_uncertainty,
             'intercept_variable': self.intercept_variable,
-            'intercept_units': self.intercept_units
+            'intercept_units': self.intercept_units,
+            # Add new fields for solving
+            'find_variable': equation_info.get('find_variable'),  # Variable user wants to find
+            'constants': equation_info.get('constants', {}),  # Known constant values
+            'measurement_units': equation_info.get('measurement_units', {}),  # NEW: User-entered units
+            'gradient_meaning': equation_info.get('gradient_meaning', self.gradient_variable),  # Full gradient expression
+            'intercept_meaning': equation_info.get('intercept_meaning', self.intercept_variable)  # Full intercept expression
         }
 
         # Store in manager

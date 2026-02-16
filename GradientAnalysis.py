@@ -54,6 +54,17 @@ class GradientAnalysisScreen(tk.Frame):
                 self.intercept_uncertainty = analysis_data.get('intercept_uncertainty', 0)
                 self.intercept_variable = analysis_data.get('intercept_variable', 'c')
                 self.intercept_units = analysis_data.get('intercept_units', '')
+
+                # Get solving information
+                self.find_variable = analysis_data.get('find_variable')
+                self.constants = analysis_data.get('constants', {})
+                self.measurement_units = analysis_data.get('measurement_units', {})
+                self.gradient_meaning = analysis_data.get('gradient_meaning', self.gradient_variable)
+                self.intercept_meaning = analysis_data.get('intercept_meaning', self.intercept_variable)
+
+                # Solve for the unknown if specified
+                if self.find_variable and self.gradient_meaning:
+                    self._solve_for_unknown()
             else:
                 messagebox.showwarning(
                     "No Analysis Data",
@@ -64,6 +75,94 @@ class GradientAnalysisScreen(tk.Frame):
                 "No Analysis Data",
                 "Could not load analysis results. Please go back and perform linear regression first."
             )
+
+    def _get_unit_conversion_factor(self, from_unit):
+        """Get conversion factor from one unit to SI base units."""
+        length_conversions = {
+            'nm': 1e-9, 'nanometer': 1e-9, 'nanometers': 1e-9,
+            'μm': 1e-6, 'um': 1e-6, 'micrometer': 1e-6, 'micrometers': 1e-6,
+            'mm': 1e-3, 'millimeter': 1e-3, 'millimeters': 1e-3,
+            'cm': 1e-2, 'centimeter': 1e-2, 'centimeters': 1e-2,
+            'km': 1e3, 'kilometer': 1e3, 'kilometers': 1e3,
+            'm': 1.0, 'meter': 1.0, 'meters': 1.0
+        }
+
+        time_conversions = {
+            'ms': 1e-3, 'millisecond': 1e-3, 'milliseconds': 1e-3,
+            'μs': 1e-6, 'us': 1e-6, 'microsecond': 1e-6, 'microseconds': 1e-6,
+            'ns': 1e-9, 'nanosecond': 1e-9, 'nanoseconds': 1e-9,
+            'min': 60, 'minute': 60, 'minutes': 60,
+            'h': 3600, 'hour': 3600, 'hours': 3600,
+            's': 1.0, 'second': 1.0, 'seconds': 1.0
+        }
+
+        voltage_conversions = {
+            'mV': 1e-3, 'millivolt': 1e-3, 'millivolts': 1e-3,
+            'kV': 1e3, 'kilovolt': 1e3, 'kilovolts': 1e3,
+            'V': 1.0, 'volt': 1.0, 'volts': 1.0
+        }
+
+        all_conversions = {**length_conversions, **time_conversions, **voltage_conversions}
+        return all_conversions.get(from_unit.lower().strip(), 1.0)
+
+    def _solve_for_unknown(self):
+        """Solve the gradient expression for the unknown variable with unit conversion."""
+        import sympy as sp
+        import re
+
+        try:
+            grad_expr_str = str(self.gradient_meaning)
+            grad_expr_str = re.sub(r'\s*\(contains.*?\)', '', grad_expr_str).strip().replace('^', '**')
+
+            all_vars = set(re.findall(r'[a-zA-Z_][a-zA-Z0-9_]*', grad_expr_str))
+            local_dict = {var: sp.Symbol(var) for var in all_vars}
+
+            from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+            transforms = standard_transformations + (implicit_multiplication_application,)
+            grad_expr = parse_expr(grad_expr_str, transformations=transforms, local_dict=local_dict)
+
+            # Apply unit conversion
+            unit_conversion_factor = 1.0
+            for var, unit in self.measurement_units.items():
+                unit_conversion_factor *= self._get_unit_conversion_factor(unit)
+
+            converted_gradient = self.gradient * unit_conversion_factor
+            converted_gradient_unc = self.gradient_uncertainty * unit_conversion_factor
+
+            # Substitute constants
+            for const_name, const_value in self.constants.items():
+                if const_name in local_dict:
+                    grad_expr = grad_expr.subs(local_dict[const_name], const_value)
+
+            # Solve for unknown
+            unknown_symbol = sp.Symbol(self.find_variable)
+            if unknown_symbol in grad_expr.free_symbols:
+                solution = sp.solve(grad_expr - converted_gradient, unknown_symbol)
+
+                if solution and len(solution) > 0:
+                    solved_value = float(solution[0])
+
+                    try:
+                        grad_sym = sp.Symbol('gradient')
+                        solution_expr = sp.solve(grad_expr - grad_sym, unknown_symbol)[0]
+                        derivative = sp.diff(solution_expr, grad_sym)
+                        uncertainty_factor = abs(float(derivative.subs(grad_sym, converted_gradient)))
+                        solved_uncertainty = uncertainty_factor * converted_gradient_unc
+                    except:
+                        if converted_gradient != 0:
+                            rel_uncertainty = abs(converted_gradient_unc / converted_gradient)
+                            solved_uncertainty = abs(solved_value * rel_uncertainty)
+                        else:
+                            solved_uncertainty = 0
+
+                    self.gradient_variable = self.find_variable
+                    self.gradient = solved_value
+                    self.gradient_uncertainty = solved_uncertainty
+
+        except Exception as e:
+            print(f"Could not solve for {self.find_variable}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def create_layout(self):
         """Create the main UI layout."""

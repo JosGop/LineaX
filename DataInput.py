@@ -367,10 +367,10 @@ class DataInputScreen(tk.Frame):
         self.input_data = InputData()
 
         # Determine file type and read accordingly
-        if hasattr(self, 'file_path'):
-            if self.file_path.endswith('.csv'):
+        if hasattr(self, 'filepath'):
+            if self.filepath.endswith('.csv'):
                 self.input_data.read_csv_file(
-                    self.file_path,
+                    self.filepath,
                     x_idx,
                     y_idx,
                     x_err_idx,
@@ -378,7 +378,7 @@ class DataInputScreen(tk.Frame):
                 )
             else:  # Excel file
                 self.input_data.read_excel(
-                    self.file_path,
+                    self.filepath,
                     x_idx,
                     y_idx,
                     x_err_idx,
@@ -780,4 +780,3 @@ if __name__ == "__main__":
     manager.show(DataInputScreen)
 
     root.mainloop()
-
