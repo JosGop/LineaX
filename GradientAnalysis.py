@@ -163,16 +163,16 @@ class GradientAnalysisScreen(tk.Frame):
             print(f"Could not solve for {self.find_variable}: {e}")
             import traceback
             traceback.print_exc()
-    
+
     def create_layout(self):
         """Create the main UI layout."""
         self.configure(padx=30, pady=20)
-        
+
         # Header with LineaX branding
         header = tk.Frame(self, bg="white", height=50)
         header.pack(fill="x", pady=(0, 20))
         header.pack_propagate(False)
-        
+
         # Back button
         tk.Button(
             header,
@@ -184,7 +184,7 @@ class GradientAnalysisScreen(tk.Frame):
             cursor="hand2",
             command=self.manager.back
         ).pack(side="left", padx=15, pady=10)
-        
+
         tk.Label(
             header,
             text="LineaX",
@@ -192,7 +192,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#0f172a"
         ).pack(side="left", padx=(10, 0), pady=10)
-        
+
         # Main Title
         tk.Label(
             self,
@@ -201,34 +201,34 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#f5f6f8",
             fg="#0f172a"
         ).pack(pady=(10, 30))
-        
+
         # Main container with rounded appearance
         container = tk.Frame(self, bg="#e5e7eb", relief="solid", bd=1)
         container.pack(fill="both", expand=True)
-        
+
         # Inner frame
         inner = tk.Frame(container, bg="white")
         inner.pack(fill="both", expand=True, padx=2, pady=2)
-        
+
         # Content padding
         content = tk.Frame(inner, bg="white")
         content.pack(fill="both", expand=True, padx=25, pady=25)
-        
+
         # Selected Equation Section
         self.create_equation_section(content)
-        
+
         # Calculated Unknown Value Section (Gradient)
         self.create_gradient_section(content)
-        
+
         # Calculated Unknown Value Section (Intercept) - Optional
         self.create_intercept_section(content)
-        
+
         # Compare with Known Value Section
         self.create_comparison_section(content)
-        
+
         # Action Buttons
         self.create_action_buttons(content)
-    
+
     def create_equation_section(self, parent):
         """Create the Selected Equation display section."""
         section = tk.LabelFrame(
@@ -239,10 +239,10 @@ class GradientAnalysisScreen(tk.Frame):
             fg="#0f172a"
         )
         section.pack(fill="x", pady=(0, 15))
-        
+
         inner = tk.Frame(section, bg="#e3f2fd")
         inner.pack(fill="x", padx=15, pady=15)
-        
+
         tk.Label(
             inner,
             text=self.equation_name,
@@ -250,7 +250,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#e3f2fd",
             fg="#0f172a"
         ).pack(anchor="w")
-        
+
         gradient_desc = f"Where gradient = {self.gradient_variable}" if self.gradient_variable else "Linear regression gradient"
         tk.Label(
             inner,
@@ -259,7 +259,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#e3f2fd",
             fg="#64748b"
         ).pack(anchor="w", pady=(3, 0))
-    
+
     def create_gradient_section(self, parent):
         """Create the Calculated Unknown Value section for gradient."""
         section = tk.LabelFrame(
@@ -270,10 +270,10 @@ class GradientAnalysisScreen(tk.Frame):
             fg="#0f172a"
         )
         section.pack(fill="x", pady=(0, 15))
-        
+
         inner = tk.Frame(section, bg="white")
         inner.pack(fill="x", padx=15, pady=15)
-        
+
         # From Best Fit label
         tk.Label(
             inner,
@@ -282,22 +282,22 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#64748b"
         ).pack(anchor="w")
-        
+
         # Main result display
         result_frame = tk.Frame(inner, bg="#d1fae5", relief="solid", bd=1)
         result_frame.pack(fill="x", pady=(5, 10))
-        
+
         result_inner = tk.Frame(result_frame, bg="#d1fae5")
         result_inner.pack(fill="x", padx=15, pady=12)
-        
+
         # Format the result
         abs_gradient = abs(self.gradient) if self.gradient is not None else 0
         gradient_unc = self.gradient_uncertainty if self.gradient_uncertainty is not None else 0
-        
+
         var_name = self.gradient_variable if self.gradient_variable else "Gradient"
         units_str = f" {self.gradient_units}" if self.gradient_units else ""
         result_text = f"{var_name} = {abs_gradient:.4e} ± {gradient_unc:.4e}{units_str}"
-        
+
         tk.Label(
             result_inner,
             text=result_text,
@@ -305,15 +305,15 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#d1fae5",
             fg="#059669"
         ).pack(anchor="w")
-        
+
         # Uncertainty range display
         range_frame = tk.Frame(inner, bg="white")
         range_frame.pack(fill="x", pady=(5, 0))
-        
+
         # Maximum value
         max_container = tk.Frame(range_frame, bg="white")
         max_container.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        
+
         tk.Label(
             max_container,
             text="Maximum (worst fit):",
@@ -321,7 +321,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#64748b"
         ).pack(anchor="w")
-        
+
         max_val = abs_gradient + gradient_unc
         tk.Label(
             max_container,
@@ -330,11 +330,11 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#0f172a"
         ).pack(anchor="w")
-        
+
         # Minimum value
         min_container = tk.Frame(range_frame, bg="white")
         min_container.pack(side="left", fill="x", expand=True)
-        
+
         tk.Label(
             min_container,
             text="Minimum (worst fit):",
@@ -342,7 +342,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#64748b"
         ).pack(anchor="w")
-        
+
         min_val = abs_gradient - gradient_unc
         tk.Label(
             min_container,
@@ -351,19 +351,19 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#0f172a"
         ).pack(anchor="w")
-    
+
     def create_intercept_section(self, parent):
         """Create optional intercept information section."""
         if self.intercept is None:
             return
-        
+
         section = tk.Frame(parent, bg="white")
         section.pack(fill="x", pady=(0, 15))
-        
+
         # Collapsible/expandable section (simplified here)
         header = tk.Frame(section, bg="#f8f9fa", cursor="hand2")
         header.pack(fill="x")
-        
+
         intercept_var = self.intercept_variable if self.intercept_variable else "Y-intercept"
         tk.Label(
             header,
@@ -372,7 +372,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#f8f9fa",
             fg="#64748b"
         ).pack(side="left", padx=10, pady=8)
-        
+
         # Show intercept value
         intercept_unc = self.intercept_uncertainty if self.intercept_uncertainty is not None else 0
         units_str = f" {self.intercept_units}" if self.intercept_units else ""
@@ -383,7 +383,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#f8f9fa",
             fg="#0f172a"
         ).pack(side="right", padx=10, pady=8)
-    
+
     def create_comparison_section(self, parent):
         """Create the Compare with Known Value section."""
         section = tk.LabelFrame(
@@ -394,14 +394,14 @@ class GradientAnalysisScreen(tk.Frame):
             fg="#9333ea"
         )
         section.pack(fill="x", pady=(0, 20))
-        
+
         inner = tk.Frame(section, bg="white")
         inner.pack(fill="x", padx=15, pady=15)
-        
+
         # Known/Accepted Value input
         input_frame = tk.Frame(inner, bg="white")
         input_frame.pack(fill="x", pady=(0, 10))
-        
+
         tk.Label(
             input_frame,
             text="Known/Accepted Value:",
@@ -409,7 +409,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="white",
             fg="#64748b"
         ).pack(anchor="w", pady=(0, 5))
-        
+
         self.known_value_entry = tk.Entry(
             input_frame,
             font=("Segoe UI", 11),
@@ -423,14 +423,14 @@ class GradientAnalysisScreen(tk.Frame):
         self.known_value_entry.bind("<FocusIn>", self._clear_placeholder)
         self.known_value_entry.bind("<FocusOut>", self._restore_placeholder)
         self.known_value_entry.bind("<Return>", lambda e: self.calculate_comparison())
-        
+
         # Percentage Difference Result
         result_frame = tk.Frame(inner, bg="#fef3c7", relief="solid", bd=1)
         result_frame.pack(fill="x", pady=(10, 0))
-        
+
         result_inner = tk.Frame(result_frame, bg="#fef3c7")
         result_inner.pack(fill="x", padx=15, pady=12)
-        
+
         tk.Label(
             result_inner,
             text="Percentage Difference:",
@@ -438,7 +438,7 @@ class GradientAnalysisScreen(tk.Frame):
             bg="#fef3c7",
             fg="#78350f"
         ).pack(anchor="w")
-        
+
         self.percentage_diff_label = tk.Label(
             result_inner,
             text="[value]%",
@@ -447,7 +447,7 @@ class GradientAnalysisScreen(tk.Frame):
             fg="#92400e"
         )
         self.percentage_diff_label.pack(anchor="w", pady=(3, 0))
-        
+
         tk.Label(
             result_inner,
             text="If difference is small, your result is within the accepted scientific standard!",
@@ -457,12 +457,12 @@ class GradientAnalysisScreen(tk.Frame):
             wraplength=400,
             justify="left"
         ).pack(anchor="w", pady=(5, 0))
-    
+
     def create_action_buttons(self, parent):
         """Create the Export and Save action buttons."""
         button_frame = tk.Frame(parent, bg="white")
         button_frame.pack(fill="x", pady=(10, 0))
-        
+
         # Export Full Report button
         tk.Button(
             button_frame,
@@ -477,7 +477,7 @@ class GradientAnalysisScreen(tk.Frame):
             pady=12,
             command=self.export_report
         ).pack(side="left", padx=(0, 10))
-        
+
         # Save Project button
         tk.Button(
             button_frame,
@@ -491,41 +491,41 @@ class GradientAnalysisScreen(tk.Frame):
             pady=12,
             command=self.save_project
         ).pack(side="right")
-    
+
     def _clear_placeholder(self, event):
         """Clear placeholder text on focus."""
         if self.known_value_entry.get().startswith("e.g."):
             self.known_value_entry.delete(0, tk.END)
             self.known_value_entry.config(fg="#0f172a")
-    
+
     def _restore_placeholder(self, event):
         """Restore placeholder text on focus out."""
         if not self.known_value_entry.get().strip():
             self.known_value_entry.insert(0, "e.g. 5.01×10⁻²")
             self.known_value_entry.config(fg="#94a3b8")
-    
+
     def calculate_comparison(self):
         """Calculate percentage difference with known value."""
         known_str = self.known_value_entry.get().strip()
-        
+
         if not known_str or known_str.startswith("e.g."):
             messagebox.showwarning(
                 "No Known Value",
                 "Please enter a known/accepted value to compare."
             )
             return
-        
+
         try:
             # Parse the input (handle scientific notation)
             known_value = self._parse_scientific_notation(known_str)
-            
+
             # Calculate percentage difference
             measured = abs(self.gradient) if self.gradient is not None else 0
             percentage_diff = abs((measured - known_value) / known_value * 100)
-            
+
             # Update display
             self.percentage_diff_label.config(text=f"{percentage_diff:.2f}%")
-            
+
             # Show interpretation
             if percentage_diff < 5:
                 interpretation = "Excellent! Your result is very close to the accepted value."
@@ -536,68 +536,36 @@ class GradientAnalysisScreen(tk.Frame):
             else:
                 interpretation = "Your result differs significantly. Check your experimental method."
                 color = "#dc2626"
-            
+
             messagebox.showinfo(
                 "Comparison Result",
                 f"Percentage Difference: {percentage_diff:.2f}%\n\n{interpretation}"
             )
-            
+
         except ValueError as e:
             messagebox.showerror(
                 "Invalid Input",
                 "Please enter a valid numerical value.\n\n"
                 "Examples:\n"
-                "• -0.05\n"
-                "• +5.01e-2\n"
-                "• +5.01*10^-3\n"
-                "• 5.01×10⁻²\n"
-                "• 510.79"
+                "• 0.05\n"
+                "• 5.01e-2\n"
+                "• 5.01×10⁻²"
             )
 
     def _parse_scientific_notation(self, text: str) -> float:
         """Parse various formats of scientific notation."""
-        import re
+        # Replace common unicode characters
+        text = text.replace('×', 'e').replace('x', 'e')
+        text = text.replace('⁻', '-').replace('−', '-')
 
-        # Remove spaces
-        text = text.strip().replace(' ', '')
-
-        # Handle leading plus sign
-        if text.startswith('+'):
-            text = text[1:]
-
-        # Replace common unicode characters for multiplication and minus
-        text = text.replace('×', '*').replace('−', '-')
-
-        # Handle superscript numbers
-        superscripts = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻', '0123456789+-')
+        # Remove superscript numbers
+        superscripts = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹', '0123456789')
         text = text.translate(superscripts)
 
-        # Handle various scientific notation formats:
-        # 5.01*10^-3 → 5.01e-3
-        # 5.01*10^(-3) → 5.01e-3
-        # 5.01×10⁻³ → 5.01e-3 (already handled above)
-        text = re.sub(r'\*\s*10\s*\^\s*\(?\s*(-?\d+)\s*\)?', r'e\1', text)
+        # Replace 10^ with e
+        text = text.replace('10^', 'e').replace('10', 'e')
 
-        # Handle formats like: 5.01*10-3 (without ^)
-        text = re.sub(r'\*\s*10\s*(-?\d+)', r'e\1', text)
-
-        # Handle simple 'e' or 'E' notation: 5.01e-2 or 5.01E-2
-        # (already valid Python format, no changes needed)
-
-        # Try to convert to float
-        try:
-            return float(text)
-        except ValueError:
-            # If it still fails, try evaluating as a simple expression
-            # This handles cases like: 5.01*10**-3
-            try:
-                # Only allow safe operations
-                if all(c in '0123456789.+-*/()eE' for c in text):
-                    return float(eval(text))
-                else:
-                    raise ValueError("Invalid characters in input")
-            except:
-                raise ValueError(f"Cannot parse '{text}' as a number")
+        return float(text)
     
     def export_report(self):
         """Export a full analysis report."""
