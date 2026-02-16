@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 from LineaX_Classes import *
 from AnalysisMethod import *
-from ManagingScreen import *
+from ManagingScreens import *
 
 
 class DataInputScreen(tk.Frame):

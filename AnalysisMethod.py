@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from Equations import *
 from LineaX_Classes import ScientificEquation, InputData
-from ManagingScreen import *
+from ManagingScreens import *
 import sympy as sp
 from sympy.parsing.sympy_parser import (
     parse_expr,
