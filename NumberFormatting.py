@@ -16,7 +16,7 @@ def format_number(value: float, sig_figs: int = 4) -> str:
     Format a number using standard form or decimal notation.
 
     Rules:
-    - If exponent is between -3 and 5 (exclusive), use decimal notation
+    - If exponent is between -3 and 4 (inclusive), use decimal notation
     - Otherwise, use standard form: coefficient × 10^exponent
 
     Args:
@@ -32,48 +32,65 @@ def format_number(value: float, sig_figs: int = 4) -> str:
         12345 → "12345"
         123456 → "1.235×10⁵"
     """
+    # Guard against None, NaN, and infinity before any arithmetic
+    if value is None:
+        return "—"
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "-∞" if value < 0 else "∞"
+
     if value == 0:
         return "0"
 
-    # Handle negative numbers
-    sign = "-" if value < 0 else ""
-    abs_value = abs(value)
+    try:
+        # Handle negative numbers
+        sign = "-" if value < 0 else ""
+        abs_value = abs(value)
 
-    # Calculate the exponent
-    exponent = math.floor(math.log10(abs_value))
+        # Calculate the exponent
+        exponent = math.floor(math.log10(abs_value))
 
-    # Use decimal notation if -3 <= exponent <= 4
-    if -3 <= exponent <= 4:
-        # Determine decimal places needed
-        if exponent >= 0:
-            # For numbers >= 1, show enough decimals for sig_figs
-            decimal_places = max(0, sig_figs - exponent - 1)
-        else:
-            # For numbers < 1, show enough decimals to reach sig_figs
-            decimal_places = sig_figs - exponent - 1
+        # Use decimal notation if -3 <= exponent <= 4
+        if -3 <= exponent <= 4:
+            # Determine decimal places needed
+            if exponent >= 0:
+                # For numbers >= 1, show enough decimals for sig_figs
+                decimal_places = max(0, sig_figs - exponent - 1)
+            else:
+                # For numbers < 1, show enough decimals to reach sig_figs
+                decimal_places = sig_figs - exponent - 1
 
-        # Format with appropriate decimal places
-        formatted = f"{abs_value:.{decimal_places}f}"
+            # Format with appropriate decimal places
+            formatted = f"{abs_value:.{decimal_places}f}"
 
-        # Remove trailing zeros after decimal point
-        if '.' in formatted:
-            formatted = formatted.rstrip('0').rstrip('.')
+            # Remove trailing zeros after decimal point
+            if '.' in formatted:
+                formatted = formatted.rstrip('0').rstrip('.')
 
-        return sign + formatted
+            return sign + formatted
 
-    # Use standard form for very small or very large numbers
-    coefficient = abs_value / (10 ** exponent)
+        # Use standard form for very small or very large numbers
+        coefficient = abs_value / (10 ** exponent)
 
-    # Round coefficient to sig_figs
-    coefficient_rounded = round(coefficient, sig_figs - 1)
+        # Round coefficient to sig_figs
+        coefficient_rounded = round(coefficient, sig_figs - 1)
 
-    # Format coefficient (remove trailing zeros)
-    coef_str = f"{coefficient_rounded:.{sig_figs - 1}f}".rstrip('0').rstrip('.')
+        # Format coefficient (remove trailing zeros)
+        coef_str = f"{coefficient_rounded:.{sig_figs - 1}f}".rstrip('0').rstrip('.')
 
-    # Format exponent with superscript
-    exp_str = format_exponent(exponent)
+        # Format exponent with superscript
+        exp_str = format_exponent(exponent)
 
-    return f"{sign}{coef_str}×10{exp_str}"
+        return f"{sign}{coef_str}×10{exp_str}"
+
+    except (ValueError, OverflowError, ZeroDivisionError):
+        # Ultimate fallback — avoids raw Python e-notation by using g format
+        return f"{value:.{sig_figs}g}"
 
 
 def format_number_with_uncertainty(value: float, uncertainty: float, sig_figs: int = 3) -> str:
@@ -94,6 +111,16 @@ def format_number_with_uncertainty(value: float, uncertainty: float, sig_figs: i
         (5.0912e-2, 7.594e-4) → "5.09×10⁻² ± 7.59×10⁻⁴"
         (510.79, 5.2) → "510.8 ± 5.2"
     """
+    # Guard against None/NaN for uncertainty
+    if uncertainty is None:
+        uncertainty = 0
+    try:
+        uncertainty = float(uncertainty)
+    except (TypeError, ValueError):
+        uncertainty = 0
+    if math.isnan(uncertainty) or math.isinf(uncertainty):
+        uncertainty = 0
+
     if uncertainty == 0:
         return format_number(value, sig_figs)
 

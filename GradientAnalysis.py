@@ -9,6 +9,10 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 from typing import Optional, Dict
 import json
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+from NumberFormatting import format_number, format_number_with_uncertainty
 
 
 class GradientAnalysisScreen(tk.Frame):
@@ -16,40 +20,40 @@ class GradientAnalysisScreen(tk.Frame):
         super().__init__(parent, bg="#f5f6f8")
         self.manager = manager
         self.parent = parent
-        
+
         # Get analysis results from previous screen
         self.gradient = None
         self.gradient_uncertainty = None
         self.gradient_variable = None
         self.gradient_units = ""
-        
+
         self.intercept = None
         self.intercept_uncertainty = None
         self.intercept_variable = None
         self.intercept_units = ""
-        
+
         # Get equation information
         self.equation_name = "Linear Equation"
-        
+
         # Load data from manager
         self._load_analysis_data()
-        
+
         # Create UI
         self.create_layout()
-    
+
     def _load_analysis_data(self):
         """Load gradient and intercept data from manager."""
         # Get analysis results stored by GraphResultsScreen
         if hasattr(self.manager, 'get_analysis_results'):
             analysis_data = self.manager.get_analysis_results()
-            
+
             if analysis_data:
                 self.equation_name = analysis_data.get('equation_name', 'Linear Equation')
                 self.gradient = analysis_data.get('gradient', 0)
                 self.gradient_uncertainty = analysis_data.get('gradient_uncertainty', 0)
                 self.gradient_variable = analysis_data.get('gradient_variable', 'm')
                 self.gradient_units = analysis_data.get('gradient_units', '')
-                
+
                 self.intercept = analysis_data.get('intercept', 0)
                 self.intercept_uncertainty = analysis_data.get('intercept_uncertainty', 0)
                 self.intercept_variable = analysis_data.get('intercept_variable', 'c')
@@ -65,6 +69,11 @@ class GradientAnalysisScreen(tk.Frame):
                 # Solve for the unknown if specified
                 if self.find_variable and self.gradient_meaning:
                     self._solve_for_unknown()
+
+                # Load raw/transformed data and graph figure for export
+                self.raw_data = self.manager.get_raw_data() if hasattr(self.manager, 'get_raw_data') else None
+                self.transformed_data = self.manager.get_data()
+                self.graph_figure = self.manager.get_graph_figure() if hasattr(self.manager, 'get_graph_figure') else None
             else:
                 messagebox.showwarning(
                     "No Analysis Data",
@@ -296,7 +305,10 @@ class GradientAnalysisScreen(tk.Frame):
 
         var_name = self.gradient_variable if self.gradient_variable else "Gradient"
         units_str = f" {self.gradient_units}" if self.gradient_units else ""
-        result_text = f"{var_name} = {abs_gradient:.4e} ± {gradient_unc:.4e}{units_str}"
+
+        # Use proper number formatting
+        formatted_value = format_number_with_uncertainty(abs_gradient, gradient_unc)
+        result_text = f"{var_name} = {formatted_value}{units_str}"
 
         tk.Label(
             result_inner,
@@ -323,9 +335,10 @@ class GradientAnalysisScreen(tk.Frame):
         ).pack(anchor="w")
 
         max_val = abs_gradient + gradient_unc
+        formatted_max = format_number(max_val)
         tk.Label(
             max_container,
-            text=f"{var_name}_max = {max_val:.4e}{units_str}",
+            text=f"{var_name}_max = {formatted_max}{units_str}",
             font=("Segoe UI", 9),
             bg="white",
             fg="#0f172a"
@@ -344,9 +357,10 @@ class GradientAnalysisScreen(tk.Frame):
         ).pack(anchor="w")
 
         min_val = abs_gradient - gradient_unc
+        formatted_min = format_number(min_val)
         tk.Label(
             min_container,
-            text=f"{var_name}_min = {min_val:.4e}{units_str}",
+            text=f"{var_name}_min = {formatted_min}{units_str}",
             font=("Segoe UI", 9),
             bg="white",
             fg="#0f172a"
@@ -376,9 +390,10 @@ class GradientAnalysisScreen(tk.Frame):
         # Show intercept value
         intercept_unc = self.intercept_uncertainty if self.intercept_uncertainty is not None else 0
         units_str = f" {self.intercept_units}" if self.intercept_units else ""
+        formatted_intercept = format_number_with_uncertainty(self.intercept, intercept_unc)
         tk.Label(
             header,
-            text=f"{self.intercept:.4e} ± {intercept_unc:.4e}{units_str}",
+            text=f"{formatted_intercept}{units_str}",
             font=("Segoe UI", 9),
             bg="#f8f9fa",
             fg="#0f172a"
@@ -547,55 +562,161 @@ class GradientAnalysisScreen(tk.Frame):
                 "Invalid Input",
                 "Please enter a valid numerical value.\n\n"
                 "Examples:\n"
-                "• 0.05\n"
-                "• 5.01e-2\n"
-                "• 5.01×10⁻²"
+                "• -0.05\n"
+                "• +5.01e-2\n"
+                "• +5.01*10^-3\n"
+                "• 5.01×10⁻²\n"
+                "• 510.79"
             )
 
     def _parse_scientific_notation(self, text: str) -> float:
         """Parse various formats of scientific notation."""
-        # Replace common unicode characters
-        text = text.replace('×', 'e').replace('x', 'e')
-        text = text.replace('⁻', '-').replace('−', '-')
+        import re
 
-        # Remove superscript numbers
-        superscripts = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹', '0123456789')
+        # Remove spaces
+        text = text.strip().replace(' ', '')
+
+        # Handle leading plus sign
+        if text.startswith('+'):
+            text = text[1:]
+
+        # Replace common unicode characters for multiplication and minus
+        text = text.replace('×', '*').replace('−', '-')
+
+        # Handle superscript numbers
+        superscripts = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻', '0123456789+-')
         text = text.translate(superscripts)
 
-        # Replace 10^ with e
-        text = text.replace('10^', 'e').replace('10', 'e')
+        # Handle various scientific notation formats:
+        # 5.01*10^-3 → 5.01e-3
+        # 5.01*10^(-3) → 5.01e-3
+        # 5.01×10⁻³ → 5.01e-3 (already handled above)
+        text = re.sub(r'\*\s*10\s*\^\s*\(?\s*(-?\d+)\s*\)?', r'e\1', text)
 
-        return float(text)
-    
+        # Handle formats like: 5.01*10-3 (without ^)
+        text = re.sub(r'\*\s*10\s*(-?\d+)', r'e\1', text)
+
+        # Handle simple 'e' or 'E' notation: 5.01e-2 or 5.01E-2
+        # (already valid Python format, no changes needed)
+
+        # Try to convert to float
+        try:
+            return float(text)
+        except ValueError:
+            # If it still fails, try evaluating as a simple expression
+            # This handles cases like: 5.01*10**-3
+            try:
+                # Only allow safe operations
+                if all(c in '0123456789.+-*/()eE' for c in text):
+                    return float(eval(text))
+                else:
+                    raise ValueError("Invalid characters in input")
+            except:
+                raise ValueError(f"Cannot parse '{text}' as a number")
+
     def export_report(self):
-        """Export a full analysis report."""
+        """Export a full analysis report as a multi-page PDF."""
         filepath = filedialog.asksaveasfilename(
             title="Export Analysis Report",
             defaultextension=".pdf",
-            filetypes=[
-                ("PDF Document", "*.pdf"),
-                ("Word Document", "*.docx"),
-                ("Text File", "*.txt"),
-                ("All Files", "*.*")
-            ]
+            filetypes=[("PDF Document", "*.pdf"), ("All Files", "*.*")]
         )
-        
-        if filepath:
-            try:
-                # In a real implementation, generate a formatted report
-                # For now, show success message
-                messagebox.showinfo(
-                    "Export Successful",
-                    f"Analysis report exported to:\n{filepath}\n\n"
-                    "The report includes:\n"
-                    "• Selected equation\n"
-                    "• Graph with best/worst fit lines\n"
-                    "• Calculated gradient and intercept\n"
-                    "• Uncertainty analysis\n"
-                    "• Comparison with known value (if provided)"
-                )
-            except Exception as e:
-                messagebox.showerror("Export Failed", f"Could not export report:\n{str(e)}")
+        if not filepath:
+            return
+
+        try:
+            with PdfPages(filepath) as pdf:
+                # --- Page 1: Graph ---
+                if self.graph_figure is not None:
+                    pdf.savefig(self.graph_figure, bbox_inches='tight')
+                else:
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.text(0.5, 0.5, "Graph not available", ha='center', va='center', fontsize=14)
+                    ax.axis('off')
+                    pdf.savefig(fig, bbox_inches='tight')
+                    plt.close(fig)
+
+                # --- Page 2: Gradient Analysis Results ---
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.axis('off')
+                abs_grad = abs(self.gradient) if self.gradient is not None else 0
+                grad_unc = self.gradient_uncertainty if self.gradient_uncertainty is not None else 0
+                intercept_unc = self.intercept_uncertainty if self.intercept_uncertainty is not None else 0
+                var = self.gradient_variable or "Gradient"
+                ivar = self.intercept_variable or "Intercept"
+                units = f" {self.gradient_units}" if self.gradient_units else ""
+                iunits = f" {self.intercept_units}" if self.intercept_units else ""
+
+                lines = [
+                    ("Gradient Analysis & Results", "", True),
+                    ("", "", False),
+                    ("Equation:", self.equation_name, False),
+                    ("", "", False),
+                    (f"From Best Fit:", "", False),
+                    (f"  {var} =", f"{format_number_with_uncertainty(abs_grad, grad_unc)}{units}", False),
+                    (f"  {var}_max =", f"{format_number(abs_grad + grad_unc)}{units}", False),
+                    (f"  {var}_min =", f"{format_number(abs(abs_grad - grad_unc))}{units}", False),
+                    ("", "", False),
+                    (f"Intercept ({ivar}) =", f"{format_number_with_uncertainty(self.intercept, intercept_unc)}{iunits}", False),
+                ]
+                y = 0.95
+                for label, value, bold in lines:
+                    weight = 'bold' if bold else 'normal'
+                    size = 14 if bold else 11
+                    ax.text(0.05, y, label, transform=ax.transAxes, fontsize=size, fontweight=weight, va='top')
+                    if value:
+                        ax.text(0.45, y, value, transform=ax.transAxes, fontsize=11, va='top')
+                    y -= 0.08
+                pdf.savefig(fig, bbox_inches='tight')
+                plt.close(fig)
+
+                # --- Page 3: Data Tables ---
+                datasets = []
+                if self.raw_data is not None and hasattr(self.raw_data, 'x_values') and len(self.raw_data.x_values) > 0:
+                    datasets.append(("Raw Data", self.raw_data))
+                if (self.transformed_data is not None and
+                        self.transformed_data is not self.raw_data and
+                        hasattr(self.transformed_data, 'x_values') and len(self.transformed_data.x_values) > 0):
+                    datasets.append(("Transformed Data", self.transformed_data))
+
+                for title, data in datasets:
+                    x_title = getattr(data, 'x_title', 'X') or 'X'
+                    y_title = getattr(data, 'y_title', 'Y') or 'Y'
+                    x_vals = data.x_values
+                    y_vals = data.y_values
+                    x_err = data.x_error if hasattr(data, 'x_error') and data.x_error is not None else [None] * len(x_vals)
+                    y_err = data.y_error if hasattr(data, 'y_error') and data.y_error is not None else [None] * len(y_vals)
+
+                    n = len(x_vals)
+                    col_labels = [x_title, f"±{x_title}", y_title, f"±{y_title}"]
+                    table_data = [
+                        [format_number(x_vals[i]),
+                         format_number(x_err[i]) if x_err[i] is not None else "—",
+                         format_number(y_vals[i]),
+                         format_number(y_err[i]) if y_err[i] is not None else "—"]
+                        for i in range(n)
+                    ]
+
+                    fig, ax = plt.subplots(figsize=(10, max(4, n * 0.35 + 2)))
+                    ax.axis('off')
+                    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+                    tbl = ax.table(cellText=table_data, colLabels=col_labels,
+                                   loc='center', cellLoc='center')
+                    tbl.auto_set_font_size(False)
+                    tbl.set_fontsize(9)
+                    tbl.auto_set_column_width(col=list(range(len(col_labels))))
+                    for (row, col), cell in tbl.get_celld().items():
+                        if row == 0:
+                            cell.set_facecolor('#0f172a')
+                            cell.set_text_props(color='white', fontweight='bold')
+                        elif row % 2 == 0:
+                            cell.set_facecolor('#f1f5f9')
+                    pdf.savefig(fig, bbox_inches='tight')
+                    plt.close(fig)
+
+            messagebox.showinfo("Export Successful", f"Report exported to:\n{filepath}")
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not export report:\n{str(e)}")
     
     def save_project(self):
         """Save the entire project for later."""

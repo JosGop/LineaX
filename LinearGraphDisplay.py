@@ -329,6 +329,7 @@ class LinearGraphResultsScreen(tk.Frame):
         # Create figure
         self.figure = plt.Figure(figsize=(8, 5), dpi=100, facecolor='white')
         ax = self.figure.add_subplot(111)
+        self.manager.set_graph_figure(self.figure)
 
         x = self.input_data.x_values
         y = self.input_data.y_values

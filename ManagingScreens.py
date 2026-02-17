@@ -60,6 +60,8 @@ class ScreenManager:
 
         # Shared application data
         self.input_data = None
+        self.raw_data = None
+        self.graph_figure = None
 
         # Equation information for linearisation
         self.equation_info = None
@@ -78,6 +80,22 @@ class ScreenManager:
         Returns the stored InputData instance.
         """
         return self.input_data
+
+    def set_raw_data(self, raw_data):
+        """Stores the original untransformed InputData."""
+        self.raw_data = raw_data
+
+    def get_raw_data(self):
+        """Returns the original untransformed InputData."""
+        return self.raw_data
+
+    def set_graph_figure(self, figure):
+        """Stores the matplotlib figure from the graph screen."""
+        self.graph_figure = figure
+
+    def get_graph_figure(self):
+        """Returns the stored matplotlib figure."""
+        return self.graph_figure
 
     def set_equation_info(self, equation_info):
         """

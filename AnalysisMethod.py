@@ -42,6 +42,7 @@ class AnalysisMethodScreen(tk.Frame):
     def _load_data_from_manager(self):
         """Load the raw InputData from the screen manager."""
         self.raw_data = self.manager.get_data()
+        self.manager.set_raw_data(self.raw_data)
 
         if self.raw_data is None:
             messagebox.showwarning(
