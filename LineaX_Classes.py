@@ -4,24 +4,20 @@ from decimal import Decimal
 import numpy as np
 from typing import List, Optional, Dict
 import pandas as pd
-from typing import List, Optional
 
 
-def resolution(num):
+def resolution(num) -> Decimal:
+    """Return the resolution (smallest unit) of a number from its decimal representation."""
     d = Decimal(str(num))
     return Decimal(f'1e{d.as_tuple().exponent}')
 
 
-def find_error(inputs: list, axis_err=None):
-    axis = np.array(inputs)
+def find_error(inputs: list, axis_err=None) -> np.ndarray:
+    """Return axis_err as an array, or derive uniform error from the minimum resolution of inputs."""
     if axis_err is not None:
-        error = np.array(axis_err)
-    else:
-        res = []
-        for i in axis:
-            res.append(resolution(i))
-        error = np.full_like(axis, min(res), dtype='float')
-    return error
+        return np.array(axis_err)
+    min_res = float(min(resolution(v) for v in inputs))
+    return np.full(len(inputs), min_res)
 
 
 class InputData:
@@ -34,96 +30,53 @@ class InputData:
         x_title: Optional[str] = None,
         y_title: Optional[str] = None,
     ):
-        self.x_values = x_values or []
-        self.y_values = y_values or []
-        self.x_error = x_error
-        self.y_error = y_error
+        self.x_values = np.array(x_values, dtype=float) if x_values is not None else np.array([], dtype=float)
+        self.y_values = np.array(y_values, dtype=float) if y_values is not None else np.array([], dtype=float)
+        self.x_error = np.array(x_error, dtype=float) if x_error is not None else None
+        self.y_error = np.array(y_error, dtype=float) if y_error is not None else None
         self.x_title = x_title
         self.y_title = y_title
 
-
-    def read_excel(self, filepath, x: int, y: int, x_err_col: None, y_err_col: None):
-        # read the Excel file into a DataFrame
-        df = pd.read_excel(filepath)
-
-        # extract values from the chosen x column (1-based index)
-        # convert each value to int if it is already an int, otherwise to float
-        x_data = [int(val) if isinstance(val, int) else float(val) for val in df.iloc[:, x - 1]]
-
-        # extract values from the chosen y column (1-based index)
-        # same conversion logic as for x values
-        y_data = [int(val) if isinstance(val, int) else float(val) for val in df.iloc[:, y - 1]]
-
-        # get the column titles (names of x and y columns)
-        x_title = df.columns[x - 1]
-        y_title = df.columns[y - 1]
-
+    def _populate(self, x_data, y_data, x_title, y_title, x_err=None, y_err=None):
+        """Shared helper: convert list data to numpy arrays and compute errors."""
         self.x_values = np.array(x_data, dtype=float)
         self.y_values = np.array(y_data, dtype=float)
-        self.x_error = find_error(x_data, x_err_col)
-        self.y_error = find_error(y_data, y_err_col)
+        self.x_error = find_error(x_data, x_err)
+        self.y_error = find_error(y_data, y_err)
         self.x_title = x_title
         self.y_title = y_title
 
-    def read_csv_file(self, filepath, x_col: int, y_col: int, x_err_col: None, y_err_col: None):
-        # create empty lists to store x and y values
-        x_data = []
-        y_data = []
+    def read_excel(self, filepath, x: int, y: int, x_err_col=None, y_err_col=None):
+        df = pd.read_excel(filepath)
+        # Preserve int if already int, otherwise convert to float
+        to_num = lambda col: [int(v) if isinstance(v, int) else float(v) for v in df.iloc[:, col - 1]]
+        self._populate(to_num(x), to_num(y), df.columns[x - 1], df.columns[y - 1], x_err_col, y_err_col)
 
-        # open the CSV file in read mode
-        # newline='' prevents issues with line breaks across operating systems
+    def read_csv_file(self, filepath, x_col: int, y_col: int, x_err_col=None, y_err_col=None):
+        x_data, y_data = [], []
         with open(filepath, newline='') as file:
-            reader = csv.reader(file)  # turn the file into a CSV reader object
-
-            # read header row to get column titles
+            reader = csv.reader(file)
             header = next(reader, None)
-            x_title = header[x_col - 1]  # title of x column
-            y_title = header[y_col - 1]  # title of y column
-
-            # go through each row in the file
+            x_title, y_title = header[x_col - 1], header[y_col - 1]
             for row in reader:
-                # take the value from the chosen x column, convert to float, add to list
                 x_data.append(float(row[x_col - 1]))
-                # take the value from the chosen y column, convert to float, add to list
                 y_data.append(float(row[y_col - 1]))
+        self._populate(x_data, y_data, x_title, y_title, x_err_col, y_err_col)
 
-            self.x_values = np.array(x_data, dtype=float)
-            self.y_values = np.array(y_data, dtype=float)
-            self.x_error = find_error(x_data, x_err_col)
-            self.y_error = find_error(y_data, y_err_col)
-            self.x_title = x_title
-            self.y_title = y_title
-
-    def get_manual_data(
-            self,
-            x_vals,
-            y_vals,
-            x_err_vals=None,
-            y_err_vals=None,
-            x_title=None,
-            y_title=None
-    ):
+    def get_manual_data(self, x_vals, y_vals, x_err_vals=None, y_err_vals=None, x_title=None, y_title=None):
         """
         Populate InputData from manual spreadsheet-style entry.
         Values are converted to floats and stored as numpy arrays.
-        Error values are generated from resolution if not provided.
+        Errors are generated from resolution if not provided.
         """
-
-        x_data = [float(v) for v in x_vals]
-        y_data = [float(v) for v in y_vals]
-
-        self.x_values = np.array(x_data, dtype=float)
-        self.y_values = np.array(y_data, dtype=float)
-
-        self.x_error = find_error(x_data, x_err_vals)
-        self.y_error = find_error(y_data, y_err_vals)
-
-        self.x_title = x_title or "X"
-        self.y_title = y_title or "Y"
+        self._populate(
+            [float(v) for v in x_vals], [float(v) for v in y_vals],
+            x_title or "X", y_title or "Y", x_err_vals, y_err_vals
+        )
 
 
-# Abstract base class for all graphs
 class Graph(ABC):
+    """Abstract base class for all graph types."""
     def __init__(self, title: str, x_axis_name: str, y_axis_name: str, equation: Optional[str] = None):
         self.title = title
         self.x_axis_name = x_axis_name
@@ -134,7 +87,7 @@ class Graph(ABC):
     def calculate_coeffs(self):
         pass
 
-# Non-linear graph inherits from abstract Graph
+
 class NonLinearGraph(Graph):
     def __init__(self, title: str, x_axis_name: str, y_axis_name: str, equation: Optional[str] = None):
         super().__init__(title, x_axis_name, y_axis_name, equation)
@@ -145,31 +98,18 @@ class NonLinearGraph(Graph):
         pass
 
 
-
-class ScientificEquation(object):
+class ScientificEquation:
     def __init__(self, original_equation: str):
         self.original_equation = original_equation
-
         # Filled after linearisation
         self.linearised_equation = None
-
-        # Axis symbols
-        self.y = None
-        self.x = None
-
-        # Linear constants
-        self.m = None
-        self.c = None
-
-        # Optional explanations
-        self.m_meaning = None
-        self.c_meaning = None
-
+        self.y = self.x = self.m = self.c = None
+        self.m_meaning = self.c_meaning = None
 
     def linearise(self):
         pass
 
-# Linear graph inherits from abstract Graph
+
 class LinearGraph(Graph):
     def __init__(self, title: str, x_axis_name: str, y_axis_name: str, equation: Optional[str] = None):
         super().__init__(title, x_axis_name, y_axis_name, equation)
@@ -179,7 +119,6 @@ class LinearGraph(Graph):
         self.worst_fit_gradient_max: Optional[float] = None
         self.worst_fit_gradient_min: Optional[float] = None
         self.uncertainty: Optional[float] = None
-
 
     def calculate_coeffs(self):
         pass

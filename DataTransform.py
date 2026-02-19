@@ -1,9 +1,9 @@
 """
 DataTransform.py
 
-This module handles transformation of raw experimental data based on
-linearisation requirements. It transforms both numerical values and axis titles
-when an equation needs to be linearised for analysis.
+Handles transformation of raw experimental data for linearisation.
+Transforms both numerical values and axis titles based on the equation type.
+Supports log, exp, power, reciprocal, and square-root transformations.
 """
 
 import numpy as np
@@ -16,23 +16,14 @@ class DataTransformer:
     """
     Transforms experimental data based on linearisation requirements.
 
-    Supports transformations for:
-    - Exponential equations: y -> ln(y)
-    - Power equations: x -> x^n
-    - Reciprocal equations: x -> 1/x
-    - Logarithmic transformations on either or both axes
+    Supported transforms: ln(x), exp(x), x^n, 1/x, sqrt(x), applied to
+    either axis independently, with correct error propagation throughout.
     """
 
     def __init__(self, input_data: InputData):
-        """
-        Initialize transformer with raw input data.
-
-        Args:
-            input_data: InputData instance containing raw measurements
-        """
         self.raw_data = input_data
-        self.transformed_data = None
-        self.transformation_applied = None
+        self.transformed_data: Optional[InputData] = None
+        self.transformation_applied: Optional[Dict] = None
 
     def transform_for_linearisation(
             self,
@@ -42,55 +33,35 @@ class DataTransformer:
             y_var: str = "y"
     ) -> InputData:
         """
-        Transform data based on linearisation requirements.
+        Apply axis transformations to produce a linearised dataset.
 
         Args:
-            x_transform: Transformation to apply to x-axis (e.g., "x", "x**2", "1/x", "ln(x)")
-            y_transform: Transformation to apply to y-axis (e.g., "y", "ln(y)", "y**2")
-            x_var: The variable name used in transformations for x
-            y_var: The variable name used in transformations for y
+            x_transform: Transformation string for x-axis (e.g. "x**2", "1/x", "ln(x)").
+            y_transform: Transformation string for y-axis (e.g. "ln(y)", "y**2").
+            x_var: Variable name used in x transformation strings.
+            y_var: Variable name used in y transformation strings.
 
         Returns:
-            InputData instance with transformed values and updated titles
+            InputData with transformed values and updated axis titles.
         """
-        # Create new InputData for transformed values
         self.transformed_data = InputData()
 
-        # Transform x values
         x_vals, x_err, x_title = self._transform_axis(
-            self.raw_data.x_values,
-            self.raw_data.x_error,
-            self.raw_data.x_title,
-            x_transform,
-            x_var
+            self.raw_data.x_values, self.raw_data.x_error, self.raw_data.x_title, x_transform, x_var
         )
-
-        # Transform y values
         y_vals, y_err, y_title = self._transform_axis(
-            self.raw_data.y_values,
-            self.raw_data.y_error,
-            self.raw_data.y_title,
-            y_transform,
-            y_var
+            self.raw_data.y_values, self.raw_data.y_error, self.raw_data.y_title, y_transform, y_var
         )
 
-        # Store transformed data
-        self.transformed_data.x_values = x_vals
-        self.transformed_data.x_error = x_err
-        self.transformed_data.x_title = x_title
+        self.transformed_data.x_values, self.transformed_data.x_error, self.transformed_data.x_title = x_vals, x_err, x_title
+        self.transformed_data.y_values, self.transformed_data.y_error, self.transformed_data.y_title = y_vals, y_err, y_title
 
-        self.transformed_data.y_values = y_vals
-        self.transformed_data.y_error = y_err
-        self.transformed_data.y_title = y_title
-
-        # Track what transformations were applied
         self.transformation_applied = {
             "x_transform": x_transform or "x",
             "y_transform": y_transform or "y",
             "x_title": x_title,
             "y_title": y_title
         }
-
         return self.transformed_data
 
     def _transform_axis(
@@ -102,248 +73,111 @@ class DataTransformer:
             var_name: str
     ) -> Tuple[np.ndarray, Optional[np.ndarray], str]:
         """
-        Transform a single axis (x or y) according to the specified transformation.
-
-        Args:
-            values: Original data values
-            errors: Original error values (can be None)
-            original_title: Original axis title
-            transform: Transformation string (e.g., "ln(x)", "x**2", "1/x")
-            var_name: Variable name to replace in transform string
+        Transform a single axis according to the transform string.
 
         Returns:
-            Tuple of (transformed_values, transformed_errors, new_title)
+            Tuple of (transformed_values, transformed_errors, new_title).
         """
-        # If no transform specified, return original data
         if transform is None or transform == var_name:
             return values, errors, original_title
 
-        # Parse the transformation
-        transform_lower = transform.lower().replace(" ", "")
+        t = transform.lower().replace(" ", "")
 
-        # Apply transformation based on type
-        if "ln(" in transform_lower or "log(" in transform_lower:
-            # Logarithmic transformation
-            new_values, new_errors = self._apply_log_transform(values, errors)
-            new_title = f"ln({original_title})"
+        if "ln(" in t or "log(" in t:
+            return *self._apply_log_transform(values, errors), f"ln({original_title})"
+        if "exp(" in t:
+            return *self._apply_exp_transform(values, errors), f"exp({original_title})"
+        if "sqrt(" in t:
+            return *self._apply_sqrt_transform(values, errors), f"\u221a{original_title}"
+        if t.startswith("1/"):
+            return *self._apply_reciprocal_transform(values, errors), f"1/{original_title}"
+        if "**" in t or "^" in t:
+            power = self._extract_power(t)
+            return *self._apply_power_transform(values, errors, power), f"{original_title}^{power}"
 
-        elif "exp(" in transform_lower:
-            # Exponential transformation
-            new_values, new_errors = self._apply_exp_transform(values, errors)
-            new_title = f"exp({original_title})"
+        return values, errors, original_title
 
-        elif "**" in transform_lower or "^" in transform_lower:
-            # Power transformation (e.g., x**2, x^3)
-            power = self._extract_power(transform_lower)
-            new_values, new_errors = self._apply_power_transform(values, errors, power)
-            new_title = f"{original_title}^{power}"
-
-        elif "/" in transform_lower and transform_lower.startswith("1/"):
-            # Reciprocal transformation
-            new_values, new_errors = self._apply_reciprocal_transform(values, errors)
-            new_title = f"1/{original_title}"
-
-        elif "sqrt(" in transform_lower:
-            # Square root transformation
-            new_values, new_errors = self._apply_sqrt_transform(values, errors)
-            new_title = f"√{original_title}"
-
-        else:
-            # No recognized transformation, return original
-            new_values = values
-            new_errors = errors
-            new_title = original_title
-
-        return new_values, new_errors, new_title
-
-    def _apply_log_transform(
-            self,
-            values: np.ndarray,
-            errors: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Apply natural logarithm transformation."""
-        # Check for non-positive values
+    def _apply_log_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """Apply ln; propagates error as Δln(x) = Δx/x."""
         if np.any(values <= 0):
             raise ValueError("Cannot take logarithm of non-positive values")
+        new_vals = np.log(values)
+        return new_vals, (errors / values if errors is not None else None)
 
-        new_values = np.log(values)
+    def _apply_exp_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """Apply exp; propagates error as Δexp(x) = exp(x)·Δx."""
+        new_vals = np.exp(values)
+        return new_vals, (new_vals * errors if errors is not None else None)
 
-        # Error propagation for ln(x): Δ(ln(x)) = Δx / x
-        if errors is not None:
-            new_errors = errors / values
-        else:
-            new_errors = None
+    def _apply_power_transform(self, values: np.ndarray, errors: Optional[np.ndarray], power: float) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """Apply x^n; propagates error as Δ(x^n) = n·x^(n-1)·Δx."""
+        new_vals = np.power(values, power)
+        new_errs = np.abs(power * np.power(values, power - 1) * errors) if errors is not None else None
+        return new_vals, new_errs
 
-        return new_values, new_errors
-
-    def _apply_exp_transform(
-            self,
-            values: np.ndarray,
-            errors: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Apply exponential transformation."""
-        new_values = np.exp(values)
-
-        # Error propagation for exp(x): Δ(exp(x)) = exp(x) * Δx
-        if errors is not None:
-            new_errors = new_values * errors
-        else:
-            new_errors = None
-
-        return new_values, new_errors
-
-    def _apply_power_transform(
-            self,
-            values: np.ndarray,
-            errors: Optional[np.ndarray],
-            power: float
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Apply power transformation (x^n)."""
-        new_values = np.power(values, power)
-
-        # Error propagation for x^n: Δ(x^n) = n * x^(n-1) * Δx
-        if errors is not None:
-            new_errors = np.abs(power * np.power(values, power - 1) * errors)
-        else:
-            new_errors = None
-
-        return new_values, new_errors
-
-    def _apply_reciprocal_transform(
-            self,
-            values: np.ndarray,
-            errors: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Apply reciprocal transformation (1/x)."""
-        # Check for zero values
+    def _apply_reciprocal_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """Apply 1/x; propagates error as Δ(1/x) = Δx/x²."""
         if np.any(values == 0):
             raise ValueError("Cannot take reciprocal of zero")
+        new_vals = 1.0 / values
+        return new_vals, (errors / (values ** 2) if errors is not None else None)
 
-        new_values = 1.0 / values
-
-        # Error propagation for 1/x: Δ(1/x) = Δx / x^2
-        if errors is not None:
-            new_errors = errors / (values ** 2)
-        else:
-            new_errors = None
-
-        return new_values, new_errors
-
-    def _apply_sqrt_transform(
-            self,
-            values: np.ndarray,
-            errors: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Apply square root transformation."""
-        # Check for negative values
+    def _apply_sqrt_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """Apply √x; propagates error as Δ√x = Δx / (2√x)."""
         if np.any(values < 0):
             raise ValueError("Cannot take square root of negative values")
-
-        new_values = np.sqrt(values)
-
-        # Error propagation for √x: Δ(√x) = Δx / (2√x)
-        if errors is not None:
-            new_errors = errors / (2 * new_values)
-        else:
-            new_errors = None
-
-        return new_values, new_errors
+        new_vals = np.sqrt(values)
+        return new_vals, (errors / (2 * new_vals) if errors is not None else None)
 
     def _extract_power(self, transform_str: str) -> float:
-        """Extract the power value from a power transformation string."""
-        # Handle both ** and ^ notation
-        if "**" in transform_str:
-            parts = transform_str.split("**")
-        elif "^" in transform_str:
-            parts = transform_str.split("^")
-        else:
-            return 1.0
-
+        """Extract the exponent value from a power transform string (x**n or x^n)."""
+        sep = "**" if "**" in transform_str else "^"
         try:
-            # Get the number after ** or ^
-            power_str = parts[1].strip()
-            # Handle parentheses
-            power_str = power_str.replace("(", "").replace(")", "")
-            return float(power_str)
+            return float(transform_str.split(sep)[1].strip("()"))
         except (IndexError, ValueError):
             return 1.0
 
     def get_transformation_info(self) -> Dict[str, str]:
-        """
-        Get information about applied transformations.
-
-        Returns:
-            Dictionary containing transformation details
-        """
+        """Return a summary dict of applied transformations."""
         if self.transformation_applied is None:
-            return {
-                "status": "No transformation applied",
-                "x_transform": "x",
-                "y_transform": "y"
-            }
-
-        return {
-            "status": "Transformation applied",
-            "x_transform": self.transformation_applied["x_transform"],
-            "y_transform": self.transformation_applied["y_transform"],
-            "x_title": self.transformation_applied["x_title"],
-            "y_title": self.transformation_applied["y_title"]
-        }
+            return {"status": "No transformation applied", "x_transform": "x", "y_transform": "y"}
+        return {"status": "Transformation applied", **self.transformation_applied}
 
     def revert_to_raw(self) -> InputData:
-        """
-        Return the original raw data without transformations.
-
-        Returns:
-            InputData instance with raw measurements
-        """
+        """Return the original, untransformed InputData."""
         return self.raw_data
 
 
 def identify_required_transformations(linearised_eq: sp.Eq, x_var: str, y_var: str) -> Tuple[str, str]:
     """
-    Identify what transformations are needed for x and y axes from a linearised equation.
-
-    Args:
-        linearised_eq: The linearised SymPy equation
-        x_var: The x variable name
-        y_var: The y variable name
+    Identify axis transformations needed from a linearised SymPy equation.
 
     Returns:
-        Tuple of (x_transform, y_transform) as strings
+        Tuple of (x_transform, y_transform) as strings.
     """
-    lhs = linearised_eq.lhs
-    rhs = linearised_eq.rhs
+    lhs, rhs = linearised_eq.lhs, linearised_eq.rhs
+    x_sym = sp.Symbol(x_var)
 
-    # Determine y-axis transformation
-    y_transform = y_var
+    # Determine y-axis transform from LHS structure
     if isinstance(lhs, sp.log):
         y_transform = f"ln({y_var})"
     elif isinstance(lhs, sp.Pow):
-        power = lhs.args[1]
-        y_transform = f"{y_var}**{power}"
+        y_transform = f"{y_var}**{lhs.args[1]}"
+    else:
+        y_transform = y_var
 
-    # Determine x-axis transformation by examining RHS
+    # Determine x-axis transform by traversing RHS
     x_transform = x_var
-
-    # Look for x in various forms in the RHS
-    x_sym = sp.Symbol(x_var)
-
-    # Check if x appears as x^n
     for term in sp.preorder_traversal(rhs):
         if isinstance(term, sp.Pow) and term.args[0] == x_sym:
             power = term.args[1]
-            x_transform = f"{x_var}**{power}"
+            x_transform = f"1/{x_var}" if power == -1 else f"{x_var}**{power}"
             break
-        elif isinstance(term, sp.Mul):
-            # Check for 1/x (appears as x**-1)
+        if isinstance(term, sp.Mul):
             for factor in term.args:
                 if isinstance(factor, sp.Pow) and factor.args[0] == x_sym:
                     power = factor.args[1]
-                    if power == -1:
-                        x_transform = f"1/{x_var}"
-                    else:
-                        x_transform = f"{x_var}**{power}"
+                    x_transform = f"1/{x_var}" if power == -1 else f"{x_var}**{power}"
                     break
 
     return x_transform, y_transform
