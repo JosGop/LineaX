@@ -1,8 +1,14 @@
 """
-GradientAnalysis.py - Gradient Analysis & Results Screen.
+GradientAnalysis.py — Screen 4 (Gradient Analysis & Results Screen) from Section 3.2.2.
 
-Interprets the physical meaning of the gradient and intercept from linear
-regression, allowing comparison with known/accepted values and PDF export.
+This is the terminal screen of the linear analysis pathway. It retrieves the
+regression results stored by LinearGraphResultsScreen via ScreenManager and:
+  - Displays the calculated gradient and intercept with uncertainties (Algorithm 5 output)
+  - Optionally solves for an unknown variable from the gradient expression (_solve_for_unknown)
+  - Applies SI unit conversions to account for non-SI measurements
+  - Provides a percentage difference comparison against a known/accepted value (Section 3 of Screen 4)
+  - Exports a multi-page PDF report (graph + results table + data tables) via export_report()
+  - Saves the project as a .lineax JSON file via save_project()
 """
 
 import tkinter as tk
@@ -17,15 +23,17 @@ from NumberFormatting import format_number, format_number_with_uncertainty
 
 
 # Unit-to-SI conversion factors (multiply measurement by factor to get SI value)
+# Used by _solve_for_unknown() when the user has entered non-SI units in Screen 2
+# (matches the unit conversion guidance in Section 3.2.2 Measurement Units input)
 _UNIT_CONVERSIONS: Dict[str, float] = {
     'nm': 1e-9, 'nanometer': 1e-9, 'nanometers': 1e-9,
-    'μm': 1e-6, 'um': 1e-6, 'micrometer': 1e-6, 'micrometers': 1e-6,
+    'um': 1e-6, 'micrometer': 1e-6, 'micrometers': 1e-6,
     'mm': 1e-3, 'millimeter': 1e-3, 'millimeters': 1e-3,
     'cm': 1e-2, 'centimeter': 1e-2, 'centimeters': 1e-2,
     'km': 1e3,  'kilometer': 1e3,  'kilometers': 1e3,
     'm': 1.0,   'meter': 1.0,      'meters': 1.0,
     'ms': 1e-3, 'millisecond': 1e-3, 'milliseconds': 1e-3,
-    'μs': 1e-6, 'us': 1e-6, 'microsecond': 1e-6, 'microseconds': 1e-6,
+    'us': 1e-6, 'microsecond': 1e-6, 'microseconds': 1e-6,
     'ns': 1e-9, 'nanosecond': 1e-9, 'nanoseconds': 1e-9,
     'min': 60,  'minute': 60,   'minutes': 60,
     'h': 3600,  'hour': 3600,   'hours': 3600,
@@ -35,17 +43,33 @@ _UNIT_CONVERSIONS: Dict[str, float] = {
     'V': 1.0,   'volt': 1.0,       'volts': 1.0,
 }
 
-# Superscript-to-ASCII translation table for parsing user input
-_FROM_SUPERSCRIPT = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻', '0123456789+-')
+# Translation table to convert Unicode superscripts to ASCII digits
+# Required for _parse_scientific_notation() to handle user input like '5.01x10^-2'
+_FROM_SUPERSCRIPT = str.maketrans('0123456789+-', '0123456789+-')
 
 
 class GradientAnalysisScreen(tk.Frame):
+    """
+    Screen 4 from Section 3.2.2 — Gradient Analysis & Results.
+
+    Reads analysis_data from ScreenManager (populated by LinearGraphResultsScreen
+    via set_analysis_results()). If a 'find_variable' was specified in Screen 2,
+    _solve_for_unknown() uses SymPy to rearrange the gradient expression and solve
+    for that variable, applying unit conversion and uncertainty propagation.
+
+    The screen is divided into four sections matching the Section 3.2.2 Screen 4 design:
+      Section 1 — Selected Equation display
+      Section 2 — Calculated Unknown Value (gradient and its worst-fit range)
+      Section 3 — Percentage Difference comparison (optional)
+      Section 4 — Export and Save action buttons
+    """
+
     def __init__(self, parent, manager):
         super().__init__(parent, bg="#f5f6f8")
         self.manager = manager
         self.parent = parent
 
-        # Gradient and intercept values populated by _load_analysis_data
+        # All attributes populated by _load_analysis_data from ScreenManager
         self.gradient = self.gradient_uncertainty = self.gradient_variable = None
         self.gradient_units = ""
         self.intercept = self.intercept_uncertainty = self.intercept_variable = None
@@ -56,7 +80,13 @@ class GradientAnalysisScreen(tk.Frame):
         self.create_layout()
 
     def _load_analysis_data(self):
-        """Load gradient and intercept data from the screen manager."""
+        """
+        Load gradient and intercept data from the screen manager.
+
+        Reads the analysis_data dict set by LinearGraphResultsScreen.analyze_gradient()
+        via ScreenManager.set_analysis_results(). Triggers _solve_for_unknown() if
+        a find_variable was specified during Screen 2 equation setup.
+        """
         if not hasattr(self.manager, 'get_analysis_results'):
             messagebox.showwarning("No Analysis Data",
                                    "Could not load analysis results. Please go back and perform linear regression first.")
@@ -83,11 +113,14 @@ class GradientAnalysisScreen(tk.Frame):
         self.gradient_meaning = data.get('gradient_meaning', self.gradient_variable)
         self.intercept_meaning = data.get('intercept_meaning', self.intercept_variable)
 
+        # If user specified a variable to find (from Screen 2), solve for it now
         if self.find_variable and self.gradient_meaning:
             self._solve_for_unknown()
 
+        # Retrieve raw and transformed data for inclusion in the PDF export (export_report)
         self.raw_data = self.manager.get_raw_data() if hasattr(self.manager, 'get_raw_data') else None
         self.transformed_data = self.manager.get_data()
+        # Retrieve the graph figure stored by LinearGraphResultsScreen for the PDF page 1
         self.graph_figure = self.manager.get_graph_figure() if hasattr(self.manager, 'get_graph_figure') else None
 
     def _get_unit_conversion_factor(self, from_unit: str) -> float:
@@ -95,11 +128,24 @@ class GradientAnalysisScreen(tk.Frame):
         return _UNIT_CONVERSIONS.get(from_unit.lower().strip(), 1.0)
 
     def _solve_for_unknown(self):
-        """Solve the gradient expression for the unknown variable with unit conversion."""
+        """
+        Solve the gradient expression for the unknown variable with unit conversion.
+
+        Uses SymPy to parse the gradient_meaning expression (e.g. '-lambda' from a
+        radioactive decay equation), substitute the measured gradient value and any
+        known constants from Screen 2, then solve for find_variable. Uncertainty is
+        propagated by differentiating the solution expression with respect to the
+        gradient symbol (standard linear error propagation).
+
+        Unit conversion is applied before solving: the gradient is multiplied by
+        the product of all SI conversion factors from measurement_units, as set
+        in Screen 2's Measurement Units input (Section 3.2.2).
+        """
         import sympy as sp
         from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 
         try:
+            # Strip '(contains ...)' annotations added by _identify_meanings
             grad_expr_str = re.sub(r'\s*\(contains.*?\)', '', str(self.gradient_meaning)).strip().replace('^', '**')
 
             all_vars = set(re.findall(r'[a-zA-Z_][a-zA-Z0-9_]*', grad_expr_str))
@@ -108,7 +154,7 @@ class GradientAnalysisScreen(tk.Frame):
             transforms = standard_transformations + (implicit_multiplication_application,)
             grad_expr = parse_expr(grad_expr_str, transformations=transforms, local_dict=local_dict)
 
-            # Apply cumulative unit conversion factor
+            # Apply cumulative SI unit conversion factor for all measured variables
             unit_conversion_factor = 1.0
             for unit in self.measurement_units.values():
                 unit_conversion_factor *= self._get_unit_conversion_factor(unit)
@@ -116,7 +162,7 @@ class GradientAnalysisScreen(tk.Frame):
             converted_gradient = self.gradient * unit_conversion_factor
             converted_gradient_unc = self.gradient_uncertainty * unit_conversion_factor
 
-            # Substitute known constants
+            # Substitute known physical constants (from Screen 2 constants input)
             for const_name, const_value in self.constants.items():
                 if const_name in local_dict:
                     grad_expr = grad_expr.subs(local_dict[const_name], const_value)
@@ -131,7 +177,7 @@ class GradientAnalysisScreen(tk.Frame):
 
             solved_value = float(solution[0])
 
-            # Propagate uncertainty via derivative
+            # Propagate uncertainty: d(unknown)/d(gradient) * gradient_uncertainty
             try:
                 grad_sym = sp.Symbol('gradient')
                 solution_expr = sp.solve(grad_expr - grad_sym, unknown_symbol)[0]
@@ -139,8 +185,10 @@ class GradientAnalysisScreen(tk.Frame):
                 uncertainty_factor = abs(float(derivative.subs(grad_sym, converted_gradient)))
                 solved_uncertainty = uncertainty_factor * converted_gradient_unc
             except Exception:
+                # Fallback: fractional uncertainty propagation
                 solved_uncertainty = abs(solved_value * abs(converted_gradient_unc / converted_gradient)) if converted_gradient else 0
 
+            # Overwrite gradient display with the solved unknown variable
             self.gradient_variable = self.find_variable
             self.gradient = solved_value
             self.gradient_uncertainty = solved_uncertainty
@@ -149,14 +197,14 @@ class GradientAnalysisScreen(tk.Frame):
             print(f"Could not solve for {self.find_variable}: {e}")
 
     def create_layout(self):
-        """Create the main UI layout."""
+        """Create the main UI layout for Screen 4."""
         self.configure(padx=30, pady=20)
 
         header = tk.Frame(self, bg="white", height=50)
         header.pack(fill="x", pady=(0, 20))
         header.pack_propagate(False)
 
-        tk.Button(header, text="← Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
+        tk.Button(header, text="Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
                   relief="flat", cursor="hand2", command=self.manager.back).pack(side="left", padx=15, pady=10)
         tk.Label(header, text="LineaX", font=("Segoe UI", 12, "bold"),
                  bg="white", fg="#0f172a").pack(side="left", padx=(10, 0), pady=10)
@@ -171,14 +219,15 @@ class GradientAnalysisScreen(tk.Frame):
         content = tk.Frame(inner, bg="white")
         content.pack(fill="both", expand=True, padx=25, pady=25)
 
-        self.create_equation_section(content)
-        self.create_gradient_section(content)
-        self.create_intercept_section(content)
-        self.create_comparison_section(content)
-        self.create_action_buttons(content)
+        # Four sections matching Section 3.2.2 Screen 4 design
+        self.create_equation_section(content)     # Section 1
+        self.create_gradient_section(content)     # Section 2
+        self.create_intercept_section(content)    # Section 2b (optional)
+        self.create_comparison_section(content)   # Section 3
+        self.create_action_buttons(content)       # Section 4
 
     def create_equation_section(self, parent):
-        """Display the selected equation name and gradient description."""
+        """Display the selected equation name and gradient description (Screen 4 Section 1)."""
         section = tk.LabelFrame(parent, text="Selected Equation", font=("Segoe UI", 10, "bold"),
                                 bg="white", fg="#0f172a")
         section.pack(fill="x", pady=(0, 15))
@@ -192,7 +241,14 @@ class GradientAnalysisScreen(tk.Frame):
                  bg="#e3f2fd", fg="#64748b").pack(anchor="w", pady=(3, 0))
 
     def create_gradient_section(self, parent):
-        """Display the calculated gradient with uncertainty and worst-fit range."""
+        """
+        Display the calculated gradient with uncertainty and worst-fit range.
+
+        Shows the 'From Best Fit' result using format_number_with_uncertainty()
+        (NumberFormatting.py), and the max/min worst-fit values calculated from
+        gradient +/- gradient_uncertainty (Algorithm 5 output from Screen 3a).
+        This is Screen 4 Section 2 from Section 3.2.2.
+        """
         section = tk.LabelFrame(parent, text="Calculated Unknown Value", font=("Segoe UI", 10, "bold"),
                                 bg="white", fg="#0f172a")
         section.pack(fill="x", pady=(0, 15))
@@ -208,6 +264,7 @@ class GradientAnalysisScreen(tk.Frame):
         var_name = self.gradient_variable or "Gradient"
         units_str = f" {self.gradient_units}" if self.gradient_units else ""
 
+        # Main result box using format_number_with_uncertainty (NumberFormatting.py)
         result_frame = tk.Frame(inner, bg="#d1fae5", relief="solid", bd=1)
         result_frame.pack(fill="x", pady=(5, 10))
         result_inner = tk.Frame(result_frame, bg="#d1fae5")
@@ -219,6 +276,7 @@ class GradientAnalysisScreen(tk.Frame):
         range_frame = tk.Frame(inner, bg="white")
         range_frame.pack(fill="x", pady=(5, 0))
 
+        # Worst-fit max and min values derived from Algorithm 5 gradient_uncertainty
         for side, label_text, val in [
             ("left",  "Maximum (worst fit):", abs_gradient + gradient_unc),
             ("right", "Minimum (worst fit):", abs_gradient - gradient_unc),
@@ -231,7 +289,13 @@ class GradientAnalysisScreen(tk.Frame):
                      font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w")
 
     def create_intercept_section(self, parent):
-        """Display the y-intercept value if available."""
+        """
+        Display the y-intercept value if available (Screen 4 additional result).
+
+        The intercept and its uncertainty are formatted using format_number_with_uncertainty().
+        This section is omitted entirely if intercept is None (e.g. for equations
+        whose only unknown is the gradient variable).
+        """
         if self.intercept is None:
             return
 
@@ -241,7 +305,7 @@ class GradientAnalysisScreen(tk.Frame):
         header.pack(fill="x")
 
         intercept_var = self.intercept_variable or "Y-intercept"
-        tk.Label(header, text=f"ℹ Additional: {intercept_var}", font=("Segoe UI", 9, "italic"),
+        tk.Label(header, text=f"Additional: {intercept_var}", font=("Segoe UI", 9, "italic"),
                  bg="#f8f9fa", fg="#64748b").pack(side="left", padx=10, pady=8)
 
         intercept_unc = self.intercept_uncertainty or 0
@@ -251,7 +315,15 @@ class GradientAnalysisScreen(tk.Frame):
                  font=("Segoe UI", 9), bg="#f8f9fa", fg="#0f172a").pack(side="right", padx=10, pady=8)
 
     def create_comparison_section(self, parent):
-        """Create the optional known-value comparison section."""
+        """
+        Create the optional known-value comparison section (Screen 4 Section 3).
+
+        Implements the percentage difference calculation from Section 3.2.2:
+        percentage_diff = |(measured - known)| / known * 100%.
+        The user types a known/accepted value (supporting multiple scientific notation
+        formats via _parse_scientific_notation) and presses Enter or the button
+        to trigger calculate_comparison().
+        """
         section = tk.LabelFrame(parent, text="Compare with Known Value (Optional)",
                                 font=("Segoe UI", 10, "bold"), bg="white", fg="#9333ea")
         section.pack(fill="x", pady=(0, 20))
@@ -263,12 +335,14 @@ class GradientAnalysisScreen(tk.Frame):
         tk.Label(input_frame, text="Known/Accepted Value:", font=("Segoe UI", 9),
                  bg="white", fg="#64748b").pack(anchor="w", pady=(0, 5))
 
+        # Entry field accepts standard form, e-notation, and Unicode superscripts
         self.known_value_entry = tk.Entry(input_frame, font=("Segoe UI", 11), relief="solid", bd=1, width=30)
         self.known_value_entry.pack(fill="x")
-        self.known_value_entry.insert(0, "e.g. 5.01×10⁻²")
+        self.known_value_entry.insert(0, "e.g. 5.01*10^-2")
         self.known_value_entry.config(fg="#94a3b8")
         self.known_value_entry.bind("<FocusIn>", self._clear_placeholder)
         self.known_value_entry.bind("<FocusOut>", self._restore_placeholder)
+        # Allow pressing Enter to trigger comparison (Section 3.1.4 usability)
         self.known_value_entry.bind("<Return>", lambda e: self.calculate_comparison())
 
         result_frame = tk.Frame(inner, bg="#fef3c7", relief="solid", bd=1)
@@ -277,6 +351,7 @@ class GradientAnalysisScreen(tk.Frame):
         result_inner.pack(fill="x", padx=15, pady=12)
         tk.Label(result_inner, text="Percentage Difference:", font=("Segoe UI", 9),
                  bg="#fef3c7", fg="#78350f").pack(anchor="w")
+        # Updated by calculate_comparison() once the user enters a known value
         self.percentage_diff_label = tk.Label(result_inner, text="[value]%", font=("Segoe UI", 14, "bold"),
                                               bg="#fef3c7", fg="#92400e")
         self.percentage_diff_label.pack(anchor="w", pady=(3, 0))
@@ -285,12 +360,14 @@ class GradientAnalysisScreen(tk.Frame):
                  wraplength=400, justify="left").pack(anchor="w", pady=(5, 0))
 
     def create_action_buttons(self, parent):
-        """Create Export and Save action buttons."""
+        """Create Export Full Report and Save Project action buttons (Screen 4 Section 4)."""
         button_frame = tk.Frame(parent, bg="white")
         button_frame.pack(fill="x", pady=(10, 0))
+        # Export generates a multi-page PDF via matplotlib PdfPages
         tk.Button(button_frame, text="Export Full Report", font=("Segoe UI", 11), bg="white", fg="#0f172a",
                   relief="solid", bd=1, cursor="hand2", padx=30, pady=12,
                   command=self.export_report).pack(side="left", padx=(0, 10))
+        # Save Project writes a .lineax JSON file for future reference
         tk.Button(button_frame, text="Save Project", font=("Segoe UI", 11, "bold"), bg="#0f172a", fg="white",
                   relief="flat", cursor="hand2", padx=30, pady=12,
                   command=self.save_project).pack(side="right")
@@ -302,11 +379,18 @@ class GradientAnalysisScreen(tk.Frame):
 
     def _restore_placeholder(self, event):
         if not self.known_value_entry.get().strip():
-            self.known_value_entry.insert(0, "e.g. 5.01×10⁻²")
+            self.known_value_entry.insert(0, "e.g. 5.01*10^-2")
             self.known_value_entry.config(fg="#94a3b8")
 
     def calculate_comparison(self):
-        """Calculate and display the percentage difference against a known value."""
+        """
+        Calculate and display the percentage difference against a known value.
+
+        Implements Screen 4 Section 3 from Section 3.2.2. Parses the input via
+        _parse_scientific_notation(), computes |measured - known| / known * 100%,
+        and provides an interpretation (Excellent/Good/Check method) based on
+        threshold values commonly used in A-Level practical marking.
+        """
         known_str = self.known_value_entry.get().strip()
         if not known_str or known_str.startswith("e.g."):
             messagebox.showwarning("No Known Value", "Please enter a known/accepted value to compare.")
@@ -315,9 +399,11 @@ class GradientAnalysisScreen(tk.Frame):
         try:
             known_value = self._parse_scientific_notation(known_str)
             measured = abs(self.gradient) if self.gradient is not None else 0
+            # Percentage difference formula from Section 3.2.2 Screen 4 Section 3
             percentage_diff = abs((measured - known_value) / known_value * 100)
             self.percentage_diff_label.config(text=f"{percentage_diff:.2f}%")
 
+            # Qualitative interpretation thresholds
             if percentage_diff < 5:
                 interpretation, color = "Excellent! Your result is very close to the accepted value.", "#059669"
             elif percentage_diff < 10:
@@ -330,13 +416,20 @@ class GradientAnalysisScreen(tk.Frame):
         except ValueError:
             messagebox.showerror("Invalid Input",
                                  "Please enter a valid numerical value.\n\n"
-                                 "Examples:\n• -0.05\n• +5.01e-2\n• +5.01*10^-3\n• 5.01×10⁻²\n• 510.79")
+                                 "Examples:\n-0.05\n+5.01e-2\n+5.01*10^-3\n5.01*10^-2\n510.79")
 
     def _parse_scientific_notation(self, text: str) -> float:
-        """Parse various formats of scientific notation into a float."""
+        """
+        Parse various formats of scientific notation into a float.
+
+        Handles: standard decimal, e-notation, multiply-by-10-to-power (5.01*10^-3),
+        Unicode times and minus signs, and Unicode superscripts (5.01x10^-2).
+        This robust parser is needed because OCR Physics A accepted values are
+        often written in non-standard notation on data sheets.
+        """
         text = text.strip().replace(' ', '').lstrip('+')
-        text = text.replace('×', '*').replace('−', '-').translate(_FROM_SUPERSCRIPT)
-        # Convert 5.01*10^(-3) and 5.01*10-3 style notation to Python e-notation
+        text = text.replace('*', '*').replace('-', '-').translate(_FROM_SUPERSCRIPT)
+        # Convert '5.01*10^(-3)' and '5.01*10-3' style notation to Python e-notation
         text = re.sub(r'\*\s*10\s*\^\s*\(?\s*(-?\d+)\s*\)?', r'e\1', text)
         text = re.sub(r'\*\s*10\s*(-?\d+)', r'e\1', text)
 
@@ -348,7 +441,16 @@ class GradientAnalysisScreen(tk.Frame):
             raise ValueError(f"Cannot parse '{text}' as a number")
 
     def export_report(self):
-        """Export a full analysis report as a multi-page PDF."""
+        """
+        Export a full analysis report as a multi-page PDF.
+
+        Generates three pages using matplotlib PdfPages:
+          Page 1 — The linearised graph figure retrieved from ScreenManager
+          Page 2 — Gradient and intercept results table formatted with format_number_with_uncertainty
+          Page 3 — Raw data and transformed data tables (one page per dataset)
+        All number formatting uses NumberFormatting.py functions for consistency
+        with the on-screen display (Section 3.2.2 Screen 4 Export function).
+        """
         filepath = filedialog.asksaveasfilename(
             title="Export Analysis Report", defaultextension=".pdf",
             filetypes=[("PDF Document", "*.pdf"), ("All Files", "*.*")]
@@ -358,7 +460,7 @@ class GradientAnalysisScreen(tk.Frame):
 
         try:
             with PdfPages(filepath) as pdf:
-                # Page 1: Graph
+                # Page 1: Graph (stored in ScreenManager by LinearGraphResultsScreen)
                 if self.graph_figure is not None:
                     pdf.savefig(self.graph_figure, bbox_inches='tight')
                 else:
@@ -401,7 +503,7 @@ class GradientAnalysisScreen(tk.Frame):
                 pdf.savefig(fig, bbox_inches='tight')
                 plt.close(fig)
 
-                # Page 3: Data Tables
+                # Page 3: Data Tables (raw data and/or transformed data)
                 datasets = []
                 if self.raw_data is not None and len(getattr(self.raw_data, 'x_values', [])) > 0:
                     datasets.append(("Raw Data", self.raw_data))
@@ -417,12 +519,12 @@ class GradientAnalysisScreen(tk.Frame):
                     x_err = data.x_error if getattr(data, 'x_error', None) is not None else [None] * n
                     y_err = data.y_error if getattr(data, 'y_error', None) is not None else [None] * n
 
-                    col_labels = [x_title, f"±{x_title}", y_title, f"±{y_title}"]
+                    col_labels = [x_title, f"+/-{x_title}", y_title, f"+/-{y_title}"]
                     table_data = [
                         [format_number(x_vals[i]),
-                         format_number(x_err[i]) if x_err[i] is not None else "—",
+                         format_number(x_err[i]) if x_err[i] is not None else "-",
                          format_number(y_vals[i]),
-                         format_number(y_err[i]) if y_err[i] is not None else "—"]
+                         format_number(y_err[i]) if y_err[i] is not None else "-"]
                         for i in range(n)
                     ]
 
@@ -447,7 +549,14 @@ class GradientAnalysisScreen(tk.Frame):
             messagebox.showerror("Export Failed", f"Could not export report:\n{e}")
 
     def save_project(self):
-        """Save the analysis results to a .lineax JSON file."""
+        """
+        Save the analysis results to a .lineax JSON file.
+
+        Writes equation name, gradient, intercept (each with value, uncertainty,
+        units, variable name) to a human-readable JSON file. The .lineax extension
+        is custom to LineaX to make projects easily identifiable. This implements
+        the 'Save Project' action from Screen 4 Section 4 (Section 3.2.2).
+        """
         filepath = filedialog.asksaveasfilename(
             title="Save LineaX Project", defaultextension=".lineax",
             filetypes=[("LineaX Project", "*.lineax"), ("JSON File", "*.json"), ("All Files", "*.*")]

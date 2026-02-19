@@ -1,8 +1,14 @@
 """
-AutomatedGraphDisplay.py - Automated Curve Fitting Screen.
+AutomatedGraphDisplay.py — Screen 3b (Automated Curve Fitting Screen) from Section 3.2.2.
 
-Displays automated curve fitting for non-linear models with Excel-style
-chart customisation. Matches the layout and functionality of LinearGraphDisplay.py.
+Implements Algorithm 8 (Curve Fitting and Graph Display) from Section 3.2.2.
+scipy.optimize.curve_fit is applied to each of the nine built-in model functions,
+R^2 scores are compared, and the best-fitting model is highlighted automatically
+(Algorithm 7 — Automated Model Selection). The user can also manually switch
+models using the radio buttons in the Model Selection panel.
+
+This screen intentionally does not provide worst-fit lines or gradient analysis
+(those are only available via the Linear pathway in LinearGraphDisplay.py).
 """
 
 import tkinter as tk
@@ -18,24 +24,32 @@ from NumberFormatting import format_number
 from typing import Optional, Dict
 
 
-# Model functions
+# ─── Model functions ────────────────────────────────────────────────────────
+# Each function corresponds to one model card in AnalysisMethodScreen's automated
+# panel and one entry in the _AUTOMATED_MODELS list (Section 3.2.2 Algorithm 8).
 
 def linear(x, a, b):
+    """y = ax + b — straight line (Algorithm 8 linear case)."""
     return a * x + b
 
 def quadratic(x, a, b, c):
+    """y = ax^2 + bx + c — parabolic fit."""
     return a * x**2 + b * x + c
 
 def cubic(x, a, b, c, d):
+    """y = ax^3 + bx^2 + cx + d — cubic polynomial fit."""
     return a * x**3 + b * x**2 + c * x + d
 
 def exponential_increase(x, a, b, c):
+    """y = a*exp(bx) + c — exponential growth (Algorithm 8 exponential case)."""
     return a * np.exp(b * x) + c
 
 def exponential_decrease(x, a, b, c):
+    """y = a*exp(-bx) + c — exponential decay, e.g. radioactive decay from OCR Physics A."""
     return a * np.exp(-b * x) + c
 
 def logarithmic(x, a, b, c):
+    """y = a*ln(bx) + c — logarithmic fit with safe handling of non-positive arguments."""
     x = np.array(x)
     with np.errstate(divide='ignore', invalid='ignore'):
         result = a * np.log(b * x) + c
@@ -43,16 +57,20 @@ def logarithmic(x, a, b, c):
     return result
 
 def logistic(x, a, b, c):
+    """y = c / (1 + exp(-(x-b)/a)) — S-shaped logistic growth."""
     return c / (1 + np.exp(-(x - b) / a))
 
 def gaussian(x, a, b, c):
+    """y = a*exp(-((x-b)^2)/(2c^2)) — Gaussian bell curve."""
     return a * np.exp(-((x - b)**2) / (2 * c**2))
 
 def sine(x, a, b, c, d):
+    """y = a*sin(b*(x-c)) + d — sinusoidal/periodic fit."""
     return a * np.sin(b * (x - c)) + d
 
 
-# Lookup table: model name → initial parameter guess (p0)
+# Initial parameter guesses for curve_fit — tuned so that scipy converges
+# within the 10000 function evaluation limit for typical physics data ranges
 _MODEL_P0 = {
     "Linear": [1, 1],
     "Quadratic": [1, 1, 1], "Exponential Increase": [1, 1, 1],
@@ -60,46 +78,65 @@ _MODEL_P0 = {
     "Cubic": [1, 1, 1, 1], "Sine": [1, 1, 1, 1],
 }
 
-# Default element states for automated fitting (no worst_fit option)
+# Default element visibility for Screen 3b — no 'worst_fit' because automated
+# fits are single curves (no error-bar worst-fit lines as in Algorithm 5)
 _DEFAULT_STATES: Dict[str, bool] = {
     'axes': True, 'axis_titles': True, 'chart_title': True, 'data_labels': False,
     'error_bars': True, 'gridlines': True, 'legend': True, 'best_fit': True,
 }
 
+# Elements available in the Screen 3b Chart Elements popup (Section 3.2.1 Branch 4)
 _POPUP_ELEMENTS = [
     ('axes', 'Axes'), ('axis_titles', 'Axis Titles'), ('chart_title', 'Chart Title'),
     ('data_labels', 'Data Labels'), ('error_bars', 'Error Bars'), ('gridlines', 'Gridlines'),
     ('legend', 'Legend'), ('best_fit', 'Best Fit Line'),
 ]
 
-# Equation text templates keyed by model name
+# Equation string templates keyed by model name — used by get_equation_text()
+# to display the fitted equation with parameter values substituted in
 _EQ_TEMPLATES = {
     "Linear":              lambda p, f: f"y = {f(p[0])}x + {f(p[1])}",
-    "Quadratic":           lambda p, f: f"y = {f(p[0])}x² + {f(p[1])}x + {f(p[2])}",
-    "Cubic":               lambda p, f: f"y = {f(p[0])}x³ + {f(p[1])}x² + {f(p[2])}x + {f(p[3])}",
+    "Quadratic":           lambda p, f: f"y = {f(p[0])}x^2 + {f(p[1])}x + {f(p[2])}",
+    "Cubic":               lambda p, f: f"y = {f(p[0])}x^3 + {f(p[1])}x^2 + {f(p[2])}x + {f(p[3])}",
     "Exponential Increase":lambda p, f: f"y = {f(p[0])}e^({f(p[1])}x) + {f(p[2])}",
     "Exponential Decrease":lambda p, f: f"y = {f(p[0])}e^(-{f(p[1])}x) + {f(p[2])}",
     "Logarithmic":         lambda p, f: f"y = {f(p[0])}ln({f(p[1])}x) + {f(p[2])}",
     "Logistic":            lambda p, f: f"y = {f(p[2])} / (1 + e^(-(x-{f(p[1])})/{f(p[0])}))",
-    "Gaussian":            lambda p, f: f"y = {f(p[0])}e^(-((x-{f(p[1])})²/(2·{f(p[2])}²)))",
+    "Gaussian":            lambda p, f: f"y = {f(p[0])}e^(-((x-{f(p[1])})^2/(2*{f(p[2])}^2)))",
     "Sine":                lambda p, f: f"y = {f(p[0])}sin({f(p[1])}(x-{f(p[2])})) + {f(p[3])}",
 }
 
 
 class AutomatedGraphResultsScreen(tk.Frame):
+    """
+    Screen 3b from Section 3.2.2 — Automated Curve Fitting Results.
+
+    On initialisation, calls fit_models() which attempts scipy.optimize.curve_fit
+    on each of the nine model functions and stores R^2 scores in self.results.
+    Algorithm 7 (Automated Model Selection) then identifies the model with the
+    highest R^2 score as self.best_model_name. The user can override the selection
+    via radio buttons in the Model Selection panel.
+
+    Unlike Screen 3a (LinearGraphDisplay.py), this screen does not compute worst-fit
+    lines or navigate to GradientAnalysisScreen — the automated path ends here.
+    """
+
     def __init__(self, parent, manager):
         super().__init__(parent, bg="#f5f6f8")
         self.manager = manager
         self.parent = parent
         self.input_data: Optional[InputData] = None
 
+        # All nine model functions registered for Algorithm 8 fitting
         self.models = {
             "Linear": linear, "Quadratic": quadratic, "Cubic": cubic,
             "Exponential Increase": exponential_increase, "Exponential Decrease": exponential_decrease,
             "Logarithmic": logarithmic, "Logistic": logistic, "Gaussian": gaussian, "Sine": sine
         }
 
+        # results dict maps model_name -> (r2_score, fitted_params) or (None, None) on failure
         self.results: Dict = {}
+        # best_model_name is Algorithm 7's output — the highest-R^2 model
         self.best_model_name = self.best_model_params = self.selected_model = None
         self.figure = self.canvas = None
         self.chart_elements_popup = None
@@ -127,14 +164,14 @@ class AutomatedGraphResultsScreen(tk.Frame):
             return False
 
     def create_layout(self):
-        """Create the main UI layout."""
+        """Create the main UI layout for Screen 3b."""
         self.configure(padx=20, pady=20)
 
         header = tk.Frame(self, bg="white", height=60)
         header.pack(fill="x", pady=(0, 15))
         header.pack_propagate(False)
 
-        tk.Button(header, text="← Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
+        tk.Button(header, text="Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
                   relief="flat", cursor="hand2", command=self.manager.back).pack(side="left", padx=15, pady=10)
 
         title_container = tk.Frame(header, bg="white")
@@ -142,14 +179,16 @@ class AutomatedGraphResultsScreen(tk.Frame):
         tk.Label(title_container, text="Graph Results - Automated Fit", font=("Segoe UI", 16, "bold"),
                  bg="white", fg="#0f172a").pack(anchor="w")
 
+        # Subtitle shows Algorithm 7's best model selection
         best_model_text = f"Best model: {self.best_model_name}" if self.best_model_name else "Analyzing models..."
         self.subtitle_label = tk.Label(title_container, text=best_model_text, font=("Segoe UI", 9),
                                        bg="white", fg="#64748b")
         self.subtitle_label.pack(anchor="w")
 
+        # Export and Chart Elements buttons (Section 3.2.1 Branch 4 Options)
         button_frame = tk.Frame(header, bg="white")
         button_frame.pack(side="right", padx=15, pady=10)
-        for text, cmd in [("Export", self.export_results), ("⚙ Chart Elements", self.open_chart_elements)]:
+        for text, cmd in [("Export", self.export_results), ("Chart Elements", self.open_chart_elements)]:
             tk.Button(button_frame, text=text, font=("Segoe UI", 10), bg="white", fg="#0f172a",
                       relief="solid", bd=1, padx=20, pady=5, cursor="hand2", command=cmd).pack(side="left", padx=5)
 
@@ -166,22 +205,33 @@ class AutomatedGraphResultsScreen(tk.Frame):
         results_container.columnconfigure(1, weight=1)
         self.create_results_panels(results_container)
 
+        # Explanatory note clarifying that worst-fit analysis is not available here
         note_frame = tk.Frame(content_frame, bg="#fef3c7", relief="solid", bd=1)
         note_frame.pack(fill="x", padx=20, pady=(0, 10))
         note_inner = tk.Frame(note_frame, bg="#fef3c7")
         note_inner.pack(fill="x", padx=10, pady=8)
-        tk.Label(note_inner, text="ℹ️", font=("Segoe UI", 10), bg="#fef3c7", fg="#92400e").pack(side="left", padx=(0, 5))
+        tk.Label(note_inner, text="Note:", font=("Segoe UI", 10), bg="#fef3c7", fg="#92400e").pack(side="left", padx=(0, 5))
         tk.Label(note_inner,
-                 text="Note: Worst fit lines and gradient analysis are only available for linear models. "
+                 text="Worst fit lines and gradient analysis are only available for linear models. "
                       "Automated fits show the single best-fitting curve for each model type.",
                  font=("Segoe UI", 9), bg="#fef3c7", fg="#92400e", wraplength=800, justify="left").pack(side="left")
 
-        tk.Button(content_frame, text="Save Results →", font=("Segoe UI", 12, "bold"), bg="#0f172a", fg="white",
+        tk.Button(content_frame, text="Save Results ->", font=("Segoe UI", 12, "bold"), bg="#0f172a", fg="white",
                   relief="flat", cursor="hand2", padx=30, pady=15, command=self.save_results).pack(
             fill="x", padx=20, pady=(0, 20))
 
     def fit_models(self):
-        """Fit all models to the data and identify the best by R² score."""
+        """
+        Fit all nine models to the data and identify the best by R^2 score.
+
+        This is Algorithm 8 (Curve Fitting) combined with Algorithm 7 (Automated
+        Model Selection) from Section 3.2.2. For each model, scipy.optimize.curve_fit
+        is called with the initial parameter guesses from _MODEL_P0. The R^2 score
+        (from sklearn.metrics.r2_score) is stored in self.results. The model with
+        the highest R^2 is set as self.best_model_name (Algorithm 7 output).
+        Models that fail to converge are stored with (None, None) and shown as
+        'Error' in the Model Selection panel.
+        """
         x_data, y_data = self.input_data.x_values, self.input_data.y_values
         best_r2 = -np.inf
 
@@ -191,17 +241,25 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 params, _ = curve_fit(model_func, x_data, y_data, p0=p0, maxfev=10000)
                 r2 = r2_score(y_data, model_func(x_data, *params))
                 self.results[model_name] = (r2, params)
+                # Algorithm 7: track the model with the highest R^2
                 if r2 > best_r2:
                     best_r2, self.best_model_name, self.best_model_params = r2, model_name, params
             except Exception:
+                # Convergence failure — store None so the UI can display 'Error'
                 self.results[model_name] = (None, None)
 
         self.selected_model = self.best_model_name
 
     def create_graph(self):
-        """Create the matplotlib graph with current element states."""
+        """
+        Create the matplotlib graph with the currently selected model's fitted curve.
+
+        Respects chart_element_states for toggling via the Chart Elements popup
+        (Section 3.2.1 Branch 4). Draws a smooth 200-point curve using the fitted
+        parameters stored in self.results for the current model.
+        """
         if self.input_data is None:
-            tk.Label(self.graph_frame, text="📈\n\n[Graph Display Area]\n\nData points with fitted curve",
+            tk.Label(self.graph_frame, text="[Graph Display Area]",
                      font=("Segoe UI", 12), fg="#94a3b8", bg="white", justify="center").pack(expand=True)
             return
 
@@ -221,6 +279,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 ax.annotate(f'{yi:.2f}', (xi, yi), textcoords="offset points",
                             xytext=(0, 8), ha='center', fontsize=8, color='#333')
 
+        # Draw the fitted curve for the selected (or best) model (Algorithm 8 output)
         current_model = self.selected_model or self.best_model_name
         if current_model and current_model in self.results and states['best_fit']:
             r2, params = self.results[current_model]
@@ -249,7 +308,13 @@ class AutomatedGraphResultsScreen(tk.Frame):
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def create_results_panels(self, parent):
-        """Create fit statistics and model selection panels."""
+        """
+        Create Fit Statistics and Model Selection panels.
+
+        Fit Statistics shows R^2, RMSE, and the fitted equation string for the
+        current model. Model Selection lists all nine models with radio buttons
+        and R^2 scores; the best model (Algorithm 7 output) gets a checkmark.
+        """
         stats_frame = tk.LabelFrame(parent, text="  Fit Statistics  ", font=("Segoe UI", 10, "bold"),
                                     bg="white", fg="#059669", relief="solid", bd=2)
         stats_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
@@ -257,6 +322,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
         self.stats_content.pack(fill="both", expand=True, padx=15, pady=10)
         self.update_statistics_display()
 
+        # Model Selection panel — Algorithm 7 best model shown with checkmark
         model_frame = tk.LabelFrame(parent, text="  Model Selection  ", font=("Segoe UI", 10, "bold"),
                                     bg="white", fg="#2563eb", relief="solid", bd=2)
         model_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
@@ -265,7 +331,13 @@ class AutomatedGraphResultsScreen(tk.Frame):
         self.update_model_selection_display()
 
     def update_statistics_display(self):
-        """Refresh the statistics panel for the current model."""
+        """
+        Refresh the statistics panel for the current model.
+
+        Displays model name, R^2 (from Algorithm 7's results dict), RMSE,
+        and the fitted equation string from _EQ_TEMPLATES using format_number()
+        from NumberFormatting.py for consistent number display.
+        """
         for widget in self.stats_content.winfo_children():
             widget.destroy()
 
@@ -276,7 +348,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
         r2_value = self.results[current_model][0]
         rmse_value = self.calculate_rmse()
         self.create_stat_label(self.stats_content, "Model:", current_model)
-        self.create_stat_label(self.stats_content, "R² value:",
+        self.create_stat_label(self.stats_content, "R value:",
                                format_number(r2_value, 6) if r2_value is not None else "N/A")
         self.create_stat_label(self.stats_content, "RMSE:",
                                format_number(rmse_value) if rmse_value is not None else "N/A")
@@ -294,7 +366,13 @@ class AutomatedGraphResultsScreen(tk.Frame):
         tk.Label(row, text=value_text, font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a", anchor="e").pack(side="right")
 
     def calculate_rmse(self) -> Optional[float]:
-        """Calculate RMSE for the currently selected model."""
+        """
+        Calculate RMSE for the currently selected model.
+
+        RMSE (Root Mean Square Error) complements R^2 by providing an absolute
+        measure of fit quality in the same units as the y data. Used in the
+        Fit Statistics panel (Section 3.2.2 Screen 3b).
+        """
         current_model = self.selected_model or self.best_model_name
         if current_model not in self.results or self.results[current_model][0] is None:
             return None
@@ -303,7 +381,13 @@ class AutomatedGraphResultsScreen(tk.Frame):
         return float(np.sqrt(np.mean((self.input_data.y_values - y_pred) ** 2)))
 
     def get_equation_text(self) -> str:
-        """Return a formatted equation string for the current model and its fitted parameters."""
+        """
+        Return a formatted equation string for the current model and its fitted parameters.
+
+        Uses _EQ_TEMPLATES with format_number() to display parameter values in
+        standard form where appropriate (NumberFormatting.py). Returns 'N/A' if
+        the model failed to converge.
+        """
         current_model = self.selected_model or self.best_model_name
         if current_model not in self.results or self.results[current_model][0] is None:
             return "N/A"
@@ -312,7 +396,13 @@ class AutomatedGraphResultsScreen(tk.Frame):
         return template(params, lambda v: format_number(v, 3)) if template else "Complex equation"
 
     def update_model_selection_display(self):
-        """Refresh the model selection panel with radio buttons and R² scores."""
+        """
+        Refresh the Model Selection panel with radio buttons and R^2 scores.
+
+        All nine models are listed. Successfully fitted models show a radio button
+        and their R^2; failed models show 'Error' in grey. The best model (Algorithm 7
+        output) is pre-selected and marked with a green checkmark.
+        """
         for widget in self.model_content.winfo_children():
             widget.destroy()
         self.model_var = tk.StringVar(value=self.best_model_name)
@@ -326,24 +416,37 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 tk.Radiobutton(row, text=f"{model_name}:", variable=self.model_var, value=model_name,
                                font=("Segoe UI", 9), bg="white", activebackground="white",
                                command=self.on_model_selected).pack(side="left", anchor="w")
+                # Green checkmark marks the Algorithm 7 best model
                 if model_name == self.best_model_name:
-                    tk.Label(row, text="✓", font=("Segoe UI", 10, "bold"), bg="white",
+                    tk.Label(row, text="Best", font=("Segoe UI", 10, "bold"), bg="white",
                              fg="#059669").pack(side="right", padx=(0, 5))
-                tk.Label(row, text=f"R² = {format_number(result[0], 4)}", font=("Segoe UI", 9, "bold"),
+                tk.Label(row, text=f"R^2 = {format_number(result[0], 4)}", font=("Segoe UI", 9, "bold"),
                          bg="white", fg="#2563eb").pack(side="right", anchor="e")
             else:
                 tk.Label(row, text=f"{model_name}: Error", font=("Segoe UI", 9),
                          bg="white", fg="#94a3b8").pack(side="left", anchor="w")
 
     def on_model_selected(self):
-        """Handle model selection change."""
+        """
+        Handle model selection change.
+
+        Updates self.selected_model, refreshes the subtitle (Screen 3b header),
+        the Fit Statistics panel, and redraws the graph to show the new model's
+        fitted curve (Algorithm 8 re-evaluation for the chosen model).
+        """
         self.selected_model = self.model_var.get()
         self.subtitle_label.config(text=f"Selected model: {self.selected_model}")
         self.update_statistics_display()
         self.refresh_graph()
 
     def open_chart_elements(self):
-        """Open or bring to front the custom chart elements popup."""
+        """
+        Open or bring to front the custom chart elements popup.
+
+        Screen 3b uses a bespoke popup (_create_custom_chart_elements_popup) rather
+        than ChartElementsPopup directly because it omits the 'worst_fit' toggle
+        that is only applicable to Screen 3a (Section 3.2.1 Branch 4 Options).
+        """
         if self.chart_elements_popup is not None:
             self.chart_elements_popup.lift()
             return
@@ -355,7 +458,14 @@ class AutomatedGraphResultsScreen(tk.Frame):
                                            lambda: setattr(self, 'chart_elements_popup', None))
 
     def _create_custom_chart_elements_popup(self):
-        """Create a popup without the worst_fit option (not applicable for automated fitting)."""
+        """
+        Build a Chart Elements popup without the worst_fit toggle.
+
+        Screen 3b does not display worst-fit lines (Algorithm 5 is only applicable
+        to linear regression on Screen 3a), so the popup elements list _POPUP_ELEMENTS
+        excludes that option. The popup structure mirrors ChartElementsPopup in
+        GraphSettings.py (Section 3.2.1 Branch 4 Options) for UI consistency.
+        """
         popup = tk.Toplevel(self.parent)
         popup.title("Chart Elements")
         popup.geometry("250x350")
@@ -373,7 +483,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
         header = tk.Frame(popup, bg="#0078d4", height=35)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text="⚙ Chart Elements", font=("Segoe UI", 11, "bold"),
+        tk.Label(header, text="Chart Elements", font=("Segoe UI", 11, "bold"),
                  bg="#0078d4", fg="white").pack(side="left", padx=10, pady=8)
 
         content = tk.Frame(popup, bg="white", padx=5, pady=10)
@@ -420,6 +530,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
             widget.bind("<Leave>", on_leave)
 
     def _on_popup_element_toggle(self, popup):
+        """Apply live element toggle from popup checkbox (Section 3.2.1 Branch 4)."""
         self.update_chart_elements({key: var.get() for key, var in popup.element_states.items()})
 
     def _reset_popup_defaults(self, popup):
@@ -434,10 +545,12 @@ class AutomatedGraphResultsScreen(tk.Frame):
         popup.destroy()
 
     def update_chart_elements(self, states: Dict[str, bool]):
+        """Receive updated element states and refresh the graph."""
         self.chart_element_states = states
         self.refresh_graph()
 
     def refresh_graph(self):
+        """Destroy the existing canvas and re-draw create_graph() with current states."""
         if self.canvas:
             self.canvas.get_tk_widget().destroy()
         if self.figure:
@@ -445,7 +558,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
         self.create_graph()
 
     def export_results(self):
-        """Export the current graph to a file."""
+        """Export the current graph to a file chosen by the user."""
         if self.figure is None:
             messagebox.showwarning("No Graph", "No graph available to export.")
             return
@@ -462,7 +575,13 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 messagebox.showerror("Export Failed", f"Could not export graph:\n{e}")
 
     def save_results(self):
-        """Show a summary of the current model's results."""
+        """
+        Show a summary of the current model's results.
+
+        Displays R^2 and RMSE for the selected model and reminds the user that
+        for gradient analysis they should use the Linear pathway (Screen 3a).
+        This is the terminal action for Screen 3b in the Section 3.2.1 Data Flow.
+        """
         current_model = self.selected_model or self.best_model_name
         if current_model and current_model in self.results:
             r2 = self.results[current_model][0]
@@ -470,7 +589,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 rmse = self.calculate_rmse()
                 messagebox.showinfo("Results Saved",
                                     f"Results saved for {current_model} model\n\n"
-                                    f"R² value: {r2:.6f}\n"
+                                    f"R^2 value: {r2:.6f}\n"
                                     f"RMSE: {rmse:.4f}\n\n"
                                     "Note: Linear models can be analyzed further through "
                                     "the Linear Analysis workflow for gradient analysis.")
@@ -485,12 +604,12 @@ class AutomatedGraphResultsScreen(tk.Frame):
         header = tk.Frame(self, bg="white", height=60)
         header.pack(fill="x", pady=(0, 15))
         header.pack_propagate(False)
-        tk.Button(header, text="← Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
+        tk.Button(header, text="Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
                   relief="flat", cursor="hand2", command=self.manager.back).pack(side="left", padx=15, pady=10)
 
         error_container = tk.Frame(self, bg="white")
         error_container.pack(fill="both", expand=True)
-        tk.Label(error_container, text="⚠️", font=("Segoe UI", 48), bg="white", fg="#dc2626").pack(pady=(100, 20))
+        tk.Label(error_container, text="Error", font=("Segoe UI", 48), bg="white", fg="#dc2626").pack(pady=(100, 20))
         tk.Label(error_container, text="Cannot Display Graph", font=("Segoe UI", 20, "bold"),
                  bg="white", fg="#0f172a").pack(pady=(0, 10))
         tk.Label(error_container,

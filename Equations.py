@@ -1,9 +1,25 @@
+"""
+Equations.py
+
+Defines the equation library and supporting data structures for LineaX.
+Corresponds to Section 3.2.1 (Sub-component: Scientific Equation Selection) and
+Section 3.2.2 (Structure of the Solution — Equation Handling module). The
+EquationLibrary implements the searchable equation dropdown described in the UI
+design (Screen 2: Analysis Method, Section 3.2.2). Physical constants are drawn
+from the OCR Physics A Data, Formulae and Relationships Booklet, as referenced
+throughout Section 3.1.3 and the proposed solution (Section 3.1.4).
+"""
+
 from dataclasses import dataclass
 from typing import Dict, List, Set, Optional, Tuple
 import sympy as sp
 
 """
 Physical constants from the OCR Physics A Data, Formulae and Relationships Booklet.
+
+Listed here to satisfy the requirement in Section 3.1.3 (Research — Equation Handling
+and Interpretation) that the solution must support pre-populated scientific constants,
+eliminating the manual entry errors identified as a limitation of Excel and Prism.
 All values are in SI units.
 """
 
@@ -26,40 +42,58 @@ CONSTANTS: Dict[str, float] = {
 
 """
 Equation data structure.
-Each equation stores a readable name, its expression as a string, a dict mapping
-symbols to meanings, a linearisation type, and optional transformation metadata.
+
+Stores the metadata required to display, search, and apply an equation.
+The transform_info dict captures the axis transformations and gradient/intercept
+meanings needed by Algorithm 2 (linearisation, Section 3.2.2) and Algorithm 5
+(gradient interpretation, Section 3.2.2). The linearisation_type field drives
+the correct branch selection in DataTransform.py.
 """
 
 
 @dataclass(frozen=True)
 class Equation:
-    name: str
-    expression: str
-    variables: Dict[str, str]
-    linearisation_type: Optional[str] = None
-    transform_info: Optional[Dict[str, str]] = None
+    """
+    Immutable record describing a single scientific equation in the library.
+
+    Each Equation instance encodes all information needed to: present the equation
+    to the user (name, expression, variables), select the correct linearisation
+    path (linearisation_type), and interpret gradient/intercept physically
+    (transform_info). Used by EquationLibrary and AnalysisMethod.py. Defined as
+    frozen to prevent accidental mutation after construction.
+    """
+    name: str             # human-readable label shown in the equation dropdown
+    expression: str       # equation as a parseable string, e.g. "v = u + a*t"
+    variables: Dict[str, str]  # maps each symbol to its physical meaning
+    linearisation_type: Optional[str] = None   # e.g. "linear", "exponential", "power"
+    transform_info: Optional[Dict[str, str]] = None  # axis transforms and gradient meanings
 
     def __post_init__(self):
+        # Ensure transform_info is never None to allow safe dict access downstream
         if self.transform_info is None:
             object.__setattr__(self, 'transform_info', {})
 
 
 class ScientificEquation:
     """
-    Represents a scientific equation and its linearised form.
+    Represents a scientific equation and its linearised y = mx + c form.
 
-    After linearisation, stores the original equation, the y = mx + c form,
-    and the physical quantities corresponding to y, x, m, and c.
+    Implements the 'Linearise to the form y = mx + c' sub-component described in
+    Section 3.2.1 (Branch 3 — Linear) and Algorithm 2 from Section 3.2.2. After
+    set_linearisation() is called, all axis and coefficient metadata is available
+    for the graph display and gradient analysis screens (Sections 3.2.2 UI design,
+    Screens 3a and 4). Note: a separate ScientificEquation class also exists in
+    LineaX_Classes.py as a stub; this version in Equations.py is the full implementation.
     """
 
     def __init__(self, original_equation: str):
-        self.original_equation = original_equation
-        self.linearised_equation: Optional[sp.Eq] = None
-        # Axis symbols and their meanings
+        self.original_equation = original_equation   # user-entered or library equation string
+        self.linearised_equation: Optional[sp.Eq] = None  # SymPy Eq in y = mx + c form
+        # Axis symbols and their meanings, set after linearisation
         self.y_symbol = self.x_symbol = self.y_meaning = self.x_meaning = None
-        # Linear constants and their physical meanings
+        # Linear constants and their physical meanings, e.g., gradient = "spring constant k"
         self.m = self.c = self.m_meaning = self.c_meaning = None
-        self.linearised_str: Optional[str] = None
+        self.linearised_str: Optional[str] = None  # human-readable linearised form for display
 
     def set_linearisation(
             self,
@@ -68,40 +102,76 @@ class ScientificEquation:
             y_meaning: str, x_meaning: str,
             m_meaning: str, c_meaning: str
     ):
-        """Set all linearisation information at once."""
+        """
+        Set all linearisation information at once.
+
+        Called after Algorithm 2 (Section 3.2.2) completes transformation. Stores the
+        SymPy equation alongside the physical meanings of each term, which are then
+        retrieved by GradientAnalysis.py to populate the 'Gradient Analysis & Results'
+        screen (Section 3.2.2, Screen 4).
+        """
         self.linearised_equation = linearised_eq
         self.y_symbol, self.x_symbol = y_symbol, x_symbol
         self.y_meaning, self.x_meaning = y_meaning, x_meaning
         self.m_meaning, self.c_meaning = m_meaning, c_meaning
-        self.linearised_str = str(linearised_eq)
+        self.linearised_str = str(linearised_eq)  # store string form for annotation display
 
     def get_plot_labels(self) -> Tuple[str, str]:
-        """Return (x_axis_label, y_axis_label) for plotting."""
+        """
+        Return (x_axis_label, y_axis_label) for the graph.
+
+        Labels reflect any transformation applied (e.g., "ln(Force)"), satisfying the
+        requirement in Section 3.2.1 (Sub-sub-component: Assign apt. x and y values)
+        that axis labels update automatically after linearisation.
+        """
         return self.x_symbol or "x", self.y_symbol or "y"
 
     def get_gradient_meaning(self) -> str:
+        """Return the physical interpretation of the gradient for Screen 4 display."""
         return self.m_meaning or "gradient"
 
     def get_intercept_meaning(self) -> str:
+        """Return the physical interpretation of the y-intercept for Screen 4 display."""
         return self.c_meaning or "y-intercept"
 
 
 """
-Equation library storing OCR Physics A syllabus equations from Modules 3-6.
-Uses an inverted keyword index built at construction for O(k) average-case search,
-where k is the number of query tokens.
+Equation library storing OCR Physics A syllabus equations from Modules 3–6.
+
+Implements the 'Scientific Equation Selection' sub-component from Section 3.2.1
+(Branch 3 — Linear). The library satisfies the success criterion (Section 3.1.4)
+requiring pre-stored equations with correct physical variable mappings. An inverted
+keyword index is built at construction for O(k) average-case search, where k is
+the number of query tokens, matching the efficiency requirement raised in Section
+3.1.4 (Measurable Success Criteria).
 """
 
 
 class EquationLibrary:
+    """
+    Searchable library of OCR Physics A equations from Modules 3–6.
+
+    Addresses the limitation identified in Section 3.1.3 (Research) that Excel and
+    Prism do not interpret gradients or intercepts in scientific context. Each stored
+    Equation includes physical variable meanings and gradient/intercept interpretations
+    so LineaX can contextualise results on Screen 4 (Section 3.2.2, User Interface).
+    The inverted index supports the search bar in Screen 2 (Analysis Method).
+    """
     def __init__(self):
-        self._equations: List[Equation] = []
-        self._index: Dict[str, Set[int]] = {}
+        self._equations: List[Equation] = []       # ordered list of all stored equations
+        self._index: Dict[str, Set[int]] = {}      # inverted keyword → equation index set
         self._load_equations()
         self._build_index()
 
     def _load_equations(self):
-        """Load all equations from Modules 3-6 of the OCR Physics A syllabus."""
+        """
+        Load all equations from Modules 3–6 of the OCR Physics A syllabus.
+
+        Equations are grouped by module and tagged with linearisation_type to drive
+        Algorithm 2 (Section 3.2.2) and transform_info for gradient interpretation
+        on Screen 4. Exponential equations include explicit transform metadata
+        corresponding to the worked examples in Section 3.2.1 (Linearise sub-component).
+        """
         self._equations = [
 
             # Module 3: Forces and motion
@@ -203,7 +273,7 @@ class EquationLibrary:
                      {"E": "energy", "m": "mass", "c": "speed of light"},
                      linearisation_type="linear"),
 
-            # Exponential equations
+            # Exponential equations — require Algorithm 2 logarithmic linearisation (Section 3.2.2)
 
             Equation("Radioactive activity", "A = A0*exp(-λ*t)",
                      {"A": "activity", "A0": "initial activity", "λ": "decay constant", "t": "time"},
@@ -248,7 +318,14 @@ class EquationLibrary:
         ]
 
     def _build_index(self):
-        """Build an inverted keyword index for O(k) average search, where k = number of query tokens."""
+        """
+        Build an inverted keyword index for O(k) average search, where k = number of query tokens.
+
+        Implements the efficient search described in Section 3.2.2 (Structure of the Solution)
+        to support the equation search bar in Screen 2 (Analysis Method). Tokens are drawn
+        from equation names, expression tokens, symbol names, and variable meanings, enabling
+        multi-term search such as "radioactive decay" or "spring constant".
+        """
         for idx, eq in enumerate(self._equations):
             tokens = set(eq.name.lower().split())
             tokens.update(eq.expression.replace("=", " ").replace("*", " ").split())
@@ -256,15 +333,22 @@ class EquationLibrary:
                 tokens.add(symbol.lower())
                 tokens.update(meaning.lower().split())
             for token in tokens:
-                self._index.setdefault(token, set()).add(idx)
+                self._index.setdefault(token, set()).add(idx)  # append index to each token's set
 
     def search(self, query: str) -> List[Equation]:
-        """Search equations using keyword intersection; returns equations matching all query tokens."""
+        """
+        Search equations using keyword intersection; returns equations matching all query tokens.
+
+        Implements the equation search bar functionality from Screen 2 (Section 3.2.2, User
+        Interface). Uses set intersection so only equations matching every query token are
+        returned, reducing false positives. Returns an empty list immediately if any token
+        is not in the index, avoiding unnecessary iteration.
+        """
         if not query:
             return []
         matched: Set[int] = set()
         for token in query.lower().split():
             if token not in self._index:
-                return []
+                return []  # early exit if any token has no matches
             matched = self._index[token] if not matched else matched & self._index[token]
         return [self._equations[i] for i in matched]
