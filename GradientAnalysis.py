@@ -113,6 +113,12 @@ class GradientAnalysisScreen(tk.Frame):
         self.gradient_meaning = data.get('gradient_meaning', self.gradient_variable)
         self.intercept_meaning = data.get('intercept_meaning', self.intercept_variable)
 
+        # Retrieve the original equation expression (e.g. "p = m*v") stored in
+        # equation_info by AnalysisMethod.generate_graph().  This is kept separate
+        # from analysis_results because it is set before regression is run.
+        eq_info = self.manager.get_equation_info() if hasattr(self.manager, 'get_equation_info') else {}
+        self.equation_expression = (eq_info or {}).get('equation_expression', '')
+
         # If user specified a variable to find (from Screen 2), solve for it now
         if self.find_variable and self.gradient_meaning:
             self._solve_for_unknown()
@@ -227,15 +233,23 @@ class GradientAnalysisScreen(tk.Frame):
         self.create_action_buttons(content)       # Section 4
 
     def create_equation_section(self, parent):
-        """Display the selected equation name and gradient description (Screen 4 Section 1)."""
+        """Display the selected equation name, expression, and gradient description (Screen 4 Section 1)."""
         section = tk.LabelFrame(parent, text="Selected Equation", font=("Segoe UI", 10, "bold"),
                                 bg="white", fg="#0f172a")
         section.pack(fill="x", pady=(0, 15))
 
         inner = tk.Frame(section, bg="#e3f2fd")
         inner.pack(fill="x", padx=15, pady=15)
+
+        # Equation name (e.g. "Momentum" or "Custom Equation")
         tk.Label(inner, text=self.equation_name, font=("Segoe UI", 13, "bold"),
                  bg="#e3f2fd", fg="#0f172a").pack(anchor="w")
+
+        # Actual equation expression (e.g. "p = m*v") — the key line that was missing
+        if self.equation_expression:
+            tk.Label(inner, text=self.equation_expression, font=("Courier", 11),
+                     bg="#e3f2fd", fg="#334155").pack(anchor="w", pady=(4, 2))
+
         gradient_desc = f"Where gradient = {self.gradient_variable}" if self.gradient_variable else "Linear regression gradient"
         tk.Label(inner, text=gradient_desc, font=("Segoe UI", 9),
                  bg="#e3f2fd", fg="#64748b").pack(anchor="w", pady=(3, 0))

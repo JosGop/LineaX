@@ -118,7 +118,7 @@ class DataInputScreen(tk.Frame):
 
         drop_content = tk.Frame(self.drop_zone, bg="#f8fafc", padx=40, pady=40)
         drop_content.pack()
-        tk.Label(drop_content, text="F", font=("Segoe UI", 32), bg="#f8fafc").pack()
+        tk.Label(drop_content, text="📂", font=("Segoe UI", 32), bg="#f8fafc").pack()
         self.drop_label = tk.Label(drop_content, text="Drop file or click to browse",
                                    font=("Segoe UI", 10), bg="#f8fafc", fg="#64748b")
         self.drop_label.pack(pady=(10, 0))
@@ -185,7 +185,7 @@ class DataInputScreen(tk.Frame):
             self.df = pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path)
             self._set_progress(70)
 
-            self.drop_label.config(text=f"OK {path.split('/')[-1]}", fg="#10b981",
+            self.drop_label.config(text=f"✓ {path.split('/')[-1]}", fg="#10b981",
                                    font=("Segoe UI", 10, "bold"))
             self.populate_columns()
             self._set_progress(100)
@@ -205,6 +205,7 @@ class DataInputScreen(tk.Frame):
         self.progress_var.set(value)
         self.progress_label.config(text=f"{value}%")
         self.parent.update()
+
 
     def populate_columns(self):
         """

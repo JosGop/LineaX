@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from LineaX_Classes import InputData, LinearGraph
+from ManagingScreens import make_scrollable, ScreenManager
 from GraphSettings import ChartElementsPopup
 from GradientAnalysis import GradientAnalysisScreen
 from NumberFormatting import format_number, format_number_with_uncertainty
