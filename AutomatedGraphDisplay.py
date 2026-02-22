@@ -2,13 +2,12 @@
 AutomatedGraphDisplay.py — Screen 3b (Automated Curve Fitting Screen) from Section 3.2.2.
 
 Implements Algorithm 8 (Curve Fitting and Graph Display) from Section 3.2.2.
-scipy.optimize.curve_fit is applied to each of the nine built-in model functions,
-R^2 scores are compared, and the best-fitting model is highlighted automatically
-(Algorithm 7 — Automated Model Selection). The user can also manually switch
+scipy.optimize.curve_fit is applied to each of the nine built-in model functions, R² scores are compared, and the
+best-fitting model is highlighted automatically (Algorithm 7 — Automated Model Selection). The user can also manually switch
 models using the radio buttons in the Model Selection panel.
 
-This screen intentionally does not provide worst-fit lines or gradient analysis
-(those are only available via the Linear pathway in LinearGraphDisplay.py).
+This screen intentionally does not provide worst-fit lines or gradient analysis (those are only available via the Linear
+pathway in LinearGraphDisplay.py).
 """
 
 import tkinter as tk
@@ -25,10 +24,11 @@ from ManagingScreens import make_scrollable
 from typing import Optional, Dict
 
 
-# ─── Model functions ────────────────────────────────────────────────────────
-# Each function corresponds to one model card in AnalysisMethodScreen's automated
-# panel and one entry in the _AUTOMATED_MODELS list (Section 3.2.2 Algorithm 8).
-
+"""
+Model functions: 
+    Each function corresponds to one model card in AnalysisMethodScreen's automated panel and one entry in the 
+    _AUTOMATED_MODELS list (Section 3.2.2 Algorithm 8).
+"""
 def linear(x, a, b):
     """y = ax + b — straight line (Algorithm 8 linear case)."""
     return a * x + b
@@ -70,8 +70,10 @@ def sine(x, a, b, c, d):
     return a * np.sin(b * (x - c)) + d
 
 
-# Initial parameter guesses for curve_fit — tuned so that scipy converges
-# within the 10000 function evaluation limit for typical physics data ranges
+"""
+Initial parameter guesses for curve_fit — tuned so that scipy converges within the 10000 function evaluation limit for 
+typical physics data ranges.
+"""
 _MODEL_P0 = {
     "Linear": [1, 1],
     "Quadratic": [1, 1, 1], "Exponential Increase": [1, 1, 1],
@@ -79,8 +81,10 @@ _MODEL_P0 = {
     "Cubic": [1, 1, 1, 1], "Sine": [1, 1, 1, 1],
 }
 
-# Equation string templates keyed by model name — used by get_equation_text()
-# to display the fitted equation with parameter values substituted in
+"""
+Equation string templates keyed by model name — used by get_equation_text() to display the fitted equation with 
+parameter values substituted in.
+"""
 _EQ_TEMPLATES = {
     "Linear":              lambda p, f: f"y = {f(p[0])}x + {f(p[1])}",
     "Quadratic":           lambda p, f: f"y = {f(p[0])}x^2 + {f(p[1])}x + {f(p[2])}",
@@ -98,14 +102,12 @@ class AutomatedGraphResultsScreen(tk.Frame):
     """
     Screen 3b from Section 3.2.2 — Automated Curve Fitting Results.
 
-    On initialisation, calls fit_models() which attempts scipy.optimize.curve_fit
-    on each of the nine model functions and stores R^2 scores in self.results.
-    Algorithm 7 (Automated Model Selection) then identifies the model with the
-    highest R^2 score as self.best_model_name. The user can override the selection
-    via radio buttons in the Model Selection panel.
+    On initialisation, calls fit_models() which attempts scipy.optimize.curve_fit on each of the nine model functions and
+    stores R² scores in self.results. Algorithm 7 (Automated Model Selection) then identifies the model with the highest
+    R² score as self.best_model_name. The user can override the selection via radio buttons in the Model Selection panel.
 
-    Unlike Screen 3a (LinearGraphDisplay.py), this screen does not compute worst-fit
-    lines or navigate to GradientAnalysisScreen — the automated path ends here.
+    Unlike Screen 3a (LinearGraphDisplay.py), this screen does not compute worst-fit lines or navigate to
+    GradientAnalysisScreen — the automated path ends here.
     """
 
     def __init__(self, parent, manager):
@@ -123,7 +125,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
 
         # results dict maps model_name -> (r2_score, fitted_params) or (None, None) on failure
         self.results: Dict = {}
-        # best_model_name is Algorithm 7's output — the highest-R^2 model
+        # best_model_name is Algorithm 7's output — the highest-R² model
         self.best_model_name = self.best_model_params = self.selected_model = None
         self.figure = self.canvas = None
         self.chart_elements_popup = None
@@ -213,14 +215,12 @@ class AutomatedGraphResultsScreen(tk.Frame):
 
     def fit_models(self):
         """
-        Fit all nine models to the data and identify the best by R^2 score.
+        Fit all nine models to the data and identify the best by R² score.
 
-        This is Algorithm 8 (Curve Fitting) combined with Algorithm 7 (Automated
-        Model Selection) from Section 3.2.2. For each model, scipy.optimize.curve_fit
-        is called with the initial parameter guesses from _MODEL_P0. The R^2 score
-        (from sklearn.metrics.r2_score) is stored in self.results. The model with
-        the highest R^2 is set as self.best_model_name (Algorithm 7 output).
-        Models that fail to converge are stored with (None, None) and shown as
+        This is Algorithm 8 (Curve Fitting) combined with Algorithm 7 (Automated Model Selection) from Section 3.2.2.
+        For each model, scipy.optimize.curve_fit is called with the initial parameter guesses from _MODEL_P0. The R² score
+        (from sklearn.metrics.r2_score) is stored in self.results. The model with the highest R² is set as
+        self.best_model_name (Algorithm 7 output). Models that fail to converge are stored with (None, None) and shown as
         'Error' in the Model Selection panel.
         """
         x_data, y_data = self.input_data.x_values, self.input_data.y_values
@@ -232,7 +232,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 params, _ = curve_fit(model_func, x_data, y_data, p0=p0, maxfev=10000)
                 r2 = r2_score(y_data, model_func(x_data, *params))
                 self.results[model_name] = (r2, params)
-                # Algorithm 7: track the model with the highest R^2
+                # Algorithm 7: track the model with the highest R²
                 if r2 > best_r2:
                     best_r2, self.best_model_name, self.best_model_params = r2, model_name, params
             except Exception:
@@ -245,9 +245,8 @@ class AutomatedGraphResultsScreen(tk.Frame):
         """
         Create the matplotlib graph with the currently selected model's fitted curve.
 
-        Respects chart_element_states for toggling via the Chart Elements popup
-        (Section 3.2.1 Branch 4). Draws a smooth 200-point curve using the fitted
-        parameters stored in self.results for the current model.
+        Respects chart_element_states for toggling via the Chart Elements popup (Section 3.2.1 Branch 4). Draws a smooth
+        200-point curve using the fitted parameters stored in self.results for the current model.
         """
         if self.input_data is None:
             tk.Label(self.graph_frame, text="[Graph Display Area]",
@@ -313,9 +312,8 @@ class AutomatedGraphResultsScreen(tk.Frame):
         """
         Create Fit Statistics and Model Selection panels.
 
-        Fit Statistics shows R^2, RMSE, and the fitted equation string for the
-        current model. Model Selection lists all nine models with radio buttons
-        and R^2 scores; the best model (Algorithm 7 output) gets a checkmark.
+        Fit Statistics shows R², RMSE, and the fitted equation string for the current model. Model Selection lists all
+        nine models with radio buttons and R² scores; the best model (Algorithm 7 output) gets a checkmark.
         """
         stats_frame = tk.LabelFrame(parent, text="  Fit Statistics  ", font=("Segoe UI", 10, "bold"),
                                     bg="white", fg="#059669", relief="solid", bd=2)
@@ -336,9 +334,8 @@ class AutomatedGraphResultsScreen(tk.Frame):
         """
         Refresh the statistics panel for the current model.
 
-        Displays model name, R^2 (from Algorithm 7's results dict), RMSE,
-        and the fitted equation string from _EQ_TEMPLATES using format_number()
-        from NumberFormatting.py for consistent number display.
+        Displays model name, R² (from Algorithm 7's results dict), RMSE (Root Mean Square Error), and the fitted equation
+        string from _EQ_TEMPLATES using format_number() from NumberFormatting.py for consistent number display.
         """
         for widget in self.stats_content.winfo_children():
             widget.destroy()
@@ -369,10 +366,9 @@ class AutomatedGraphResultsScreen(tk.Frame):
 
     def calculate_rmse(self) -> Optional[float]:
         """
-        Calculate RMSE for the currently selected model.
+        Calculate RMSE (Root Mean Square Error) for the currently selected model.
 
-        RMSE (Root Mean Square Error) complements R^2 by providing an absolute
-        measure of fit quality in the same units as the y data. Used in the
+        RMSE complements R² by providing an absolute measure of fit quality in the same units as the y data. Used in the
         Fit Statistics panel (Section 3.2.2 Screen 3b).
         """
         current_model = self.selected_model or self.best_model_name
@@ -386,9 +382,8 @@ class AutomatedGraphResultsScreen(tk.Frame):
         """
         Return a formatted equation string for the current model and its fitted parameters.
 
-        Uses _EQ_TEMPLATES with format_number() to display parameter values in
-        standard form where appropriate (NumberFormatting.py). Returns 'N/A' if
-        the model failed to converge.
+        Uses _EQ_TEMPLATES with format_number() to display parameter values in standard form where appropriate
+        (NumberFormatting.py). Returns 'N/A' if the model failed to converge.
         """
         current_model = self.selected_model or self.best_model_name
         if current_model not in self.results or self.results[current_model][0] is None:
@@ -399,11 +394,10 @@ class AutomatedGraphResultsScreen(tk.Frame):
 
     def update_model_selection_display(self):
         """
-        Refresh the Model Selection panel with radio buttons and R^2 scores.
+        Refresh the Model Selection panel with radio buttons and R² scores.
 
-        All nine models are listed. Successfully fitted models show a radio button
-        and their R^2; failed models show 'Error' in grey. The best model (Algorithm 7
-        output) is pre-selected and marked with a green checkmark.
+        All nine models are listed. Successfully fitted models show a radio button and their R²; failed models show 'Error'
+        in grey. The best model (Algorithm 7 output) is pre-selected and marked with a green checkmark.
         """
         for widget in self.model_content.winfo_children():
             widget.destroy()
@@ -422,7 +416,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 if model_name == self.best_model_name:
                     tk.Label(row, text="Best", font=("Segoe UI", 10, "bold"), bg="white",
                              fg="#059669").pack(side="right", padx=(0, 5))
-                tk.Label(row, text=f"R^2 = {format_number(result[0], 4)}", font=("Segoe UI", 9, "bold"),
+                tk.Label(row, text=f"R² = {format_number(result[0], 4)}", font=("Segoe UI", 9, "bold"),
                          bg="white", fg="#2563eb").pack(side="right", anchor="e")
             else:
                 tk.Label(row, text=f"{model_name}: Error", font=("Segoe UI", 9),
@@ -432,9 +426,8 @@ class AutomatedGraphResultsScreen(tk.Frame):
         """
         Handle model selection change.
 
-        Updates self.selected_model, refreshes the subtitle (Screen 3b header),
-        the Fit Statistics panel, and redraws the graph to show the new model's
-        fitted curve (Algorithm 8 re-evaluation for the chosen model).
+        Updates self.selected_model, refreshes the subtitle (Screen 3b header), the Fit Statistics panel, and redraws the
+        graph to show the new model's fitted curve (Algorithm 8 re-evaluation for the chosen model).
         """
         self.selected_model = self.model_var.get()
         self.subtitle_label.config(text=f"Selected model: {self.selected_model}")
@@ -508,9 +501,8 @@ class AutomatedGraphResultsScreen(tk.Frame):
         """
         Show a summary of the current model's results.
 
-        Displays R^2 and RMSE for the selected model and reminds the user that
-        for gradient analysis they should use the Linear pathway (Screen 3a).
-        This is the terminal action for Screen 3b in the Section 3.2.1 Data Flow.
+        Displays R² and RMSE for the selected model and reminds the user that for gradient analysis they should use the
+        Linear pathway (Screen 3a). This is the terminal action for Screen 3b in the Section 3.2.1 Data Flow.
         """
         current_model = self.selected_model or self.best_model_name
         if current_model and current_model in self.results:
@@ -519,7 +511,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 rmse = self.calculate_rmse()
                 messagebox.showinfo("Results Saved",
                                     f"Results saved for {current_model} model\n\n"
-                                    f"R^2 value: {r2:.6f}\n"
+                                    f"R² value: {r2:.6f}\n"
                                     f"RMSE: {rmse:.4f}\n\n"
                                     "Note: Linear models can be analyzed further through "
                                     "the Linear Analysis workflow for gradient analysis.")

@@ -1,12 +1,10 @@
 """
 LineaX_Classes.py
 
-Core data structures and abstract base classes for the LineaX application.
-Defined in Section 3.3 Development (Stage 1) as the foundational layer that
-all downstream modules — regression, uncertainty analysis, and plotting — depend on.
-These classes implement the data abstraction described in Section 3.2.2 (Structure
-of the Solution) and the key variables table in Section 3.2.2 (Key Variables,
-Data Structures, and Validation).
+Core data structures and abstract base classes for the LineaX application that act as the foundational layer that all
+downstream modules (regression, uncertainty analysis, and plotting) depend on.
+These classes implement the data abstraction described in Section 3.2.2 (Structure of the Solution) and the key variables
+table in Section 3.2.2 (Key Variables, Data Structures, and Validation).
 """
 
 from abc import ABC, abstractmethod
@@ -21,11 +19,10 @@ def resolution(num) -> Decimal:
     """
     Return the resolution (smallest measurable unit) of a number from its decimal representation.
 
-    Implements Algorithm 3 from Section 3.2.2: the first step in automated error
-    estimation, which identifies the minimum resolution present in a dataset.
-    Resolution corresponds to the physical precision of the measuring instrument —
-    e.g., a ruler marked to 1 mm has resolution 0.001 m. Used by find_error()
-    to derive uncertainty when the user provides none.
+    Implements Algorithm 3 from Section 3.2.2: the first step in automated error estimation, which identifies the minimum
+    resolution present in a dataset.
+    Resolution corresponds to the physical precision of the measuring instrument — e.g., a ruler marked to 1 mm has resolution
+    0.001 m. Used by find_error() to derive uncertainty when the user provides none.
     """
     d = Decimal(str(num))
     return Decimal(f'1e{d.as_tuple().exponent}')
@@ -35,12 +32,11 @@ def find_error(inputs: list, axis_err=None) -> np.ndarray:
     """
     Return axis_err as a numpy array, or derive uniform error from the minimum resolution of inputs.
 
-    Implements Algorithm 4 from Section 3.2.2: determines the appropriate uncertainty
-    values for each data point, using user-supplied errors if available, otherwise
-    applying resolution-based estimation via resolution(). Described in Section 3.2.1
-    (Sub-component: Automated Error Value Generation) — this function activates when
-    the uncertainty column is left blank. Ensures every data point has a valid
-    uncertainty value before worst-fit line calculations can proceed.
+    Implements Algorithm 4 from Section 3.2.2: determines the appropriate uncertainty values for each data point, using
+    user-supplied errors if available, otherwise applying resolution-based estimation via resolution().
+    Described in Section 3.2.1 (Sub-component: Automated Error Value Generation) — this function activates when the uncertainty
+    column is left blank.
+    Ensures every data point has a valid uncertainty value before worst-fit line calculations can proceed.
     """
     if axis_err is not None:
         return np.array(axis_err)
@@ -52,12 +48,10 @@ class InputData:
     """
     Central container for all experimental values entered by the user.
 
-    Defined in Section 3.3 Development (Stage 1) as the primary data abstraction
-    layer. Ensures that downstream components (regression, uncertainty analysis,
-    plotting) interact with a consistent, validated structure regardless of whether
-    data originates from manual entry or file import. Corresponds to the variables
-    x_values, y_values, x_error, y_error, x_title, y_title in the Key Variables
-    table (Section 3.2.2).
+    Aims to act as the primary data abstraction layer. Ensures that downstream components (regression, uncertainty
+    analysis, plotting) interact with a consistent, validated structure regardless of whether data originates from
+    manual entry or file import. Corresponds to the variables x_values, y_values, x_error, y_error, x_title, y_title
+    in the Key Variables table (Section 3.2.2).
     """
 
     def __init__(
@@ -81,9 +75,8 @@ class InputData:
         """
         Shared helper: convert list data to numpy arrays and compute errors.
 
-        Called by read_excel(), read_csv_file(), and get_manual_data() to centralise
-        array conversion and uncertainty derivation in one place. Calls find_error()
-        (Algorithm 4) to assign or compute uncertainties, satisfying the requirement
+        Called by read_excel(), read_csv_file(), and get_manual_data() to centralise array conversion and uncertainty
+        derivation in one place. Calls find_error() (Algorithm 4) to assign or compute uncertainties, satisfying the requirement
         in Section 3.2.1 that every dataset has uncertainty information before analysis.
         """
         self.x_values = np.array(x_data, dtype=float)
@@ -98,10 +91,9 @@ class InputData:
         Populate InputData from an Excel file.
 
         Supports the 'Import CSV/Excel' branch of Section 3.2.1 (Branch 1).
-        Column indices are 1-based to match the user-facing column mapping interface
-        described in Section 3.2.1 (Sub-component: User to allocate columns for values
-        and/or errors). Preserves integer types where present to maintain resolution
-        accuracy for Algorithm 3.
+        Column indices are 1-based to match the user-facing column mapping interface described in Section 3.2.1
+        (Sub-component: User to allocate columns for values and/or errors). Preserves integer types where present to maintain
+        resolution accuracy for Algorithm 3.
         """
         df = pd.read_excel(filepath)
         # Preserve int if already int, otherwise convert to float
@@ -112,10 +104,9 @@ class InputData:
         """
         Populate InputData from a CSV file.
 
-        Supports the 'Import CSV/Excel' branch of Section 3.2.1 (Branch 1). Column
-        headers are extracted from the first row and stored as axis titles, satisfying
-        the requirement that axis labels reflect the imported data source (Section 3.2.2,
-        User Interface). Column indices are 1-based to match the mapping UI.
+        Supports the 'Import CSV/Excel' branch of Section 3.2.1 (Branch 1). Column headers are extracted from the first
+        row and stored as axis titles, satisfying the requirement that axis labels reflect the imported data source
+        (Section 3.2.2, User Interface). Column indices are 1-based to match the mapping UI.
         """
         x_data, y_data = [], []
         with open(filepath, newline='') as file:
@@ -131,11 +122,9 @@ class InputData:
         """
         Populate InputData from manual spreadsheet-style entry.
 
-        Supports the 'Manual Entry' branch of Section 3.2.1 (Branch 2) and the
-        Data Input Screen described in Section 3.3 (Stage 2). Values are converted
-        to floats and stored as numpy arrays. Calls find_error() (Algorithm 4) to
-        generate resolution-based uncertainty if no explicit errors are provided,
-        as required by the Automated Error Value Generation sub-component.
+        Supports the 'Manual Entry' branch of Section 3.2.1 (Branch 2).
+        Values are converted to floats and stored as numpy arrays. Calls find_error() (Algorithm 4) to generate resolution-based
+        uncertainty if no explicit errors are provided, as required by the Automated Error Value Generation sub-component.
         """
         self._populate(
             [float(v) for v in x_vals], [float(v) for v in y_vals],
@@ -147,12 +136,10 @@ class Graph(ABC):
     """
     Abstract base class for all graph types in LineaX.
 
-    Part of the OOP architecture described in Section 3.3 Development (Stage 1).
-    Enforces a common interface across LinearGraph and NonLinearGraph, supporting
-    the 'Graphs' branch (Branch 4) of the decomposition in Section 3.2.1. The
-    abstract calculate_coeffs() method ensures every concrete graph type implements
-    its own regression logic, as required by the automated and scientific equation
-    pathways in Section 3.2.1 (Branch 3).
+    Part of the OOP architecture described in Section 3.2.1 (UML Plan).
+    Enforces a common interface across LinearGraph and NonLinearGraph, supporting the 'Graphs' branch (Branch 4) of the
+    decomposition in Section 3.2.1. The abstract calculate_coeffs() method ensures every concrete graph type implements
+    its own regression logic, as required by the automated and scientific equation pathways in Section 3.2.1 (Branch 3).
     """
     def __init__(self, title: str, x_axis_name: str, y_axis_name: str, equation: Optional[str] = None):
         self.title = title          # displayed as chart title on the graph output screen
@@ -170,11 +157,9 @@ class NonLinearGraph(Graph):
     """
     Represents a graph fitted by the automated model selection pathway.
 
-    Supports the 'Automated' sub-component of Section 3.2.1 (Branch 3) and
-    Algorithm 8 from Section 3.2.2, which fits multiple models and evaluates
-    accuracy using R². Stores R² values for all tested models in r2_values, which
-    is displayed in the Model Selection panel described in Section 3.2.2 (User Interface
-    — Screen 3b: Automated Graph Output).
+    Supports the 'Automated' sub-component of Section 3.2.1 (Branch 3) and Algorithm 8 from Section 3.2.2, which fits multiple
+    models and evaluates accuracy using R². Stores R² values for all tested models in r2_values, which is displayed in the
+    Model Selection panel described in Section 3.2.2 (User Interface — Screen 3b: Automated Graph Output).
     """
     def __init__(self, title: str, x_axis_name: str, y_axis_name: str, equation: Optional[str] = None):
         super().__init__(title, x_axis_name, y_axis_name, equation)
@@ -190,12 +175,10 @@ class ScientificEquation:
     """
     Represents a scientific equation and its linearised form.
 
-    Defined in Section 3.3 Development (Stage 1) and described in Section 3.2.2
-    (Structure of the Solution). Stores both the original equation and the y = mx + c
-    linearised form, including the physical meanings of m and c. Used by the
-    'Scientific Equation Selection' and 'Linearise to y = mx + c' sub-components
-    of Section 3.2.1 (Branch 3). The linearise() stub corresponds to Algorithm 2
-    from Section 3.2.2.
+    As described in Section 3.2.2 (Structure of the Solution).
+    Stores both the original equation and the y = mx + c linearised form, including the physical meanings of m and c.
+    Used by the 'Scientific Equation Selection' and 'Linearise to y = mx + c' sub-components of Section 3.2.1 (Branch 3).
+    The linearise() stub corresponds to Algorithm 2 from Section 3.2.2.
     """
     def __init__(self, original_equation: str):
         self.original_equation = original_equation  # e.g., "F = kx" as entered or selected
@@ -208,10 +191,8 @@ class ScientificEquation:
         """
         Transform the original equation into y = mx + c form.
 
-        Implements Algorithm 2 from Section 3.2.2: applies symbolic transformation
-        (SymPy) to non-linear equations. Full implementation is in Equations.py and
-        DataTransform.py. Discussed extensively in Section 3.3 (Linearising Equations
-        and its failures/improvements).
+        Implements Algorithm 2 from Section 3.2.2: applies symbolic transformation (SymPy) to non-linear equations.
+        Full implementation is in Equations.py and DataTransform.py.
         """
         pass
 
@@ -220,11 +201,9 @@ class LinearGraph(Graph):
     """
     Represents a graph analysed via the scientific equation (linear) pathway.
 
-    Supports the 'Linear' sub-component of Section 3.2.1 (Branch 3). Stores
-    best-fit and worst-fit gradient values (Algorithms 4 and 5 from Section 3.2.2),
-    y-intercept, and gradient uncertainty. These attributes correspond directly to
-    the key variables m_best, c_best, m_steep, m_shallow, and gradient_uncertainty
-    defined in the Key Variables table (Section 3.2.2).
+    Supports the 'Linear' sub-component of Section 3.2.1 (Branch 3). Stores best-fit and worst-fit gradient values
+    (Algorithms 4 and 5 from Section 3.2.2), y-intercept, and gradient uncertainty. These attributes correspond directly
+    to the key variables m_best, c_best, m_steep, m_shallow, and gradient_uncertainty defined in the Key Variables table (Section 3.2.2).
     """
     def __init__(self, title: str, x_axis_name: str, y_axis_name: str, equation: Optional[str] = None):
         super().__init__(title, x_axis_name, y_axis_name, equation)
@@ -249,10 +228,9 @@ class LinearGraph(Graph):
         """
         Calculate the steepest and shallowest lines through error bars.
 
-        Implements Algorithm 5 from Section 3.2.2: determines worst-fit gradients
-        that can reasonably pass through the data given measurement uncertainties.
-        Required by the OCR A-Level Physics specification for uncertainty analysis
-        in graphical work, as noted in Section 3.2.2.
+        Implements Algorithm 5 from Section 3.2.2: determines worst-fit gradients that can reasonably pass through the data
+        given measurement uncertainties.
+        Required by the OCR A-Level Physics specification for uncertainty analysis in graphical work, as noted in Section 3.2.2.
         """
         pass
 
@@ -260,8 +238,7 @@ class LinearGraph(Graph):
         """
         Compute gradient uncertainty as (m_steep - m_shallow) / 2.
 
-        Finalises Algorithm 5 output from Section 3.2.2. The result is stored as
-        gradient_uncertainty and displayed on Screen 4 (Gradient Analysis & Results)
-        described in Section 3.2.2 (User Interface).
+        Finalises Algorithm 5 output from Section 3.2.2. The result is stored as gradient_uncertainty and displayed on
+        Screen 4 (Gradient Analysis & Results) described in Section 3.2.2 (User Interface).
         """
         pass

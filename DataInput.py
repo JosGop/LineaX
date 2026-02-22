@@ -1,10 +1,8 @@
 """
-DataInput.py — Screen 1 (Data Input Screen) from Section 3.2.2.
+DataInput.py — Screen 1 (Data Input Screen) from Section 3.2.2 Screen 1 UI design.
 
-This is the entry point for all data into LineaX. It implements Branch 1
-(Import CSV/Excel) and Branch 2 (Manual Data Entry) from the decomposition
-in Section 3.2.1. The validated InputData object produced here is passed
-via ScreenManager to every subsequent screen.
+This is the entry point for all data into LineaX. It implements Branch 1 (Import CSV/Excel) and Branch 2 (Manual Data Entry)
+from the decomposition in Section 3.2.1. The validated InputData object produced here is passed via ScreenManager to every subsequent screen.
 """
 
 import tkinter as tk
@@ -22,8 +20,8 @@ def _btn(parent, text, command, bg="#0f172a", fg="white", font_size=10, bold=Tru
     """
     Factory helper that creates consistently styled flat buttons across Screen 1.
 
-    Centralises button styling so any change to the design (Section 3.1.4 usability)
-    propagates to every button automatically rather than being scattered across the file.
+    Centralises button styling so any change to the design (Section 3.1.4 usability) propagates to every button automatically
+    rather than being scattered across the file.
     """
     weight = "bold" if bold else "normal"
     return tk.Button(parent, text=text, font=("Segoe UI", font_size, weight),
@@ -38,9 +36,8 @@ class DataInputScreen(tk.Frame):
       - Left panel  -> Branch 1 (Import CSV/Excel file)
       - Right panel -> Branch 2 (Manual spreadsheet-style entry)
 
-    Once the user clicks 'Next ->', Algorithm 1 (input validation) from Section 3.2.2
-    runs, and the resulting InputData object is stored in ScreenManager before
-    navigating forward to AnalysisMethodScreen (Screen 2).
+    Once the user clicks 'Next ->', Algorithm 1 (input validation) from Section 3.2.2 runs, and the resulting InputData
+    object is stored in ScreenManager before navigating forward to AnalysisMethodScreen (Screen 2).
     """
 
     def __init__(self, parent, manager):
@@ -86,9 +83,8 @@ class DataInputScreen(tk.Frame):
         """
         Build the left panel for Branch 1 (Import CSV/Excel) from Section 3.2.1.
 
-        Contains a file drop-zone, a Select File button, a loading progress bar,
-        and four dropdown menus for mapping spreadsheet columns to x/y values
-        and their optional uncertainties.
+        Contains a file drop-zone, a Select File button, a loading progress bar, and four dropdown menus for mapping spreadsheet
+        columns to x/y values and their optional uncertainties.
         """
         self.import_panel_container, self.import_panel, _, _ = make_scrollable(
             parent, row=0, column=0, padx=(0, 10), bg="white", panel_kwargs={"padx": 20, "pady": 20}
@@ -164,8 +160,8 @@ class DataInputScreen(tk.Frame):
         """
         Open a file-chooser dialog and load the selected CSV or Excel file via pandas.
 
-        Implements Branch 1 from Section 3.2.1: on success, populates the column
-        dropdowns and disables the manual-entry panel so both paths cannot be mixed.
+        Implements Branch 1 from Section 3.2.1: on success, populates the column dropdowns and disables the manual-entry
+        panel so both paths cannot be mixed.
         Progress bar updates give live feedback at 0%, 30%, 70%, and 100% milestones.
         """
         path = filedialog.askopenfilename(
@@ -211,8 +207,7 @@ class DataInputScreen(tk.Frame):
         """
         Populate column dropdowns after file load.
 
-        Auto-selects the first two columns as x and y to reduce user effort
-        (Section 3.1.4 usability — minimise number of steps required).
+        Auto-selects the first two columns as x and y to reduce user effort (Section 3.1.4 usability — minimise number of steps required).
         """
         if self.df is None:
             return
@@ -236,10 +231,9 @@ class DataInputScreen(tk.Frame):
         """
         Collect data from the imported CSV/Excel file into self.input_data.
 
-        Converts dropdown-selected column names to 1-based column indices and
-        calls InputData.read_csv_file() or InputData.read_excel() — part of
-        Branch 1 (Import CSV/Excel) from Section 3.2.1. Raises ValueError with
-        a user-friendly message if the column selection is incomplete.
+        Converts dropdown-selected column names to 1-based column indices and calls InputData.read_csv_file() or
+        InputData.read_excel() — part of Branch 1 (Import CSV/Excel) from Section 3.2.1. Raises ValueError with a user-friendly
+        message if the column selection is incomplete.
         """
         if self.df is None:
             raise ValueError("No file has been imported.")
@@ -268,9 +262,8 @@ class DataInputScreen(tk.Frame):
         """
         Collect data from manual entry fields into self.input_data.
 
-        Implements Branch 2 (Manual Data Entry) from Section 3.2.1. Calls
-        get_manual_data() to extract the grid values, applies Algorithm 1 validation
-        checks (minimum 3 points, equal-length x/y), and forwards the data to
+        Implements Branch 2 (Manual Data Entry) from Section 3.2.1. Calls get_manual_data() to extract the grid values,
+        applies Algorithm 1 validation checks (minimum 3 points, equal-length x/y), and forwards the data to
         InputData.get_manual_data() which wraps it in the standard container.
         """
         manual_data = self.get_manual_data()
@@ -301,10 +294,9 @@ class DataInputScreen(tk.Frame):
         """
         Build the right panel for Branch 2 (Manual Spreadsheet Entry) from Section 3.2.1.
 
-        The panel contains an editable header row (for axis titles) and seven
-        blank data-entry rows. 'Add Row' / 'Delete Row' buttons allow the user
-        to adjust table size. Entry widgets perform live validation (Algorithm 1)
-        with colour coding (green = valid, red = invalid).
+        The panel contains an editable header row (for axis titles) and seven blank data-entry rows. 'Add Row' / 'Delete Row'
+        buttons allow the user to adjust table size. Entry widgets perform live validation (Algorithm 1) with colour coding
+        (green = valid, red = invalid).
         """
         self.manual_panel_container, self.manual_panel, _, _ = make_scrollable(
             parent, row=0, column=1, padx=(10, 0), bg="white", panel_kwargs={"padx": 20, "pady": 20}
@@ -366,10 +358,8 @@ class DataInputScreen(tk.Frame):
         """
         Provide visual feedback for entry validation; disable import panel when manual data is entered.
 
-        This is an implementation of Algorithm 1 (Section 3.2.2): each keystroke
-        checks whether the current field value is a valid float and colours the
-        cell green (#f0fdf4) or red (#fee2e2) accordingly, giving immediate
-        feedback to the user.
+        This is an implementation of Algorithm 1 (Section 3.2.2): each keystroke checks whether the current field value
+        is a valid float and colours the cell green (#f0fdf4) or red (#fee2e2) accordingly, giving immediate feedback to the user.
         """
         if self.df is None and entry_widget.get().strip():
             # User is typing in manual panel — lock the import panel to prevent mixing inputs
@@ -407,9 +397,8 @@ class DataInputScreen(tk.Frame):
         """
         Extract and return data from manual entry fields, or None on invalid/empty input.
 
-        Iterates over all entry rows, skips fully blank rows, and collects numeric
-        values into parallel lists keyed by 'X', 'Y', 'X_err', 'Y_err'. Returns
-        None if any cell contains a non-numeric value (part of Algorithm 1 validation
+        Iterates over all entry rows, skips fully blank rows, and collects numeric values into parallel lists keyed by
+        'X', 'Y', 'X_err', 'Y_err'. Returns None if any cell contains a non-numeric value (part of Algorithm 1 validation
         from Section 3.2.2).
         """
         if self.df is not None:
@@ -433,11 +422,9 @@ class DataInputScreen(tk.Frame):
         """
         Validate input from whichever path was used and navigate to AnalysisMethodScreen.
 
-        This is the 'Next ->' button handler and the final step of Screen 1 from
-        Section 3.2.2. Calls Algorithm 1 (collect_file_data or collect_manual_data),
-        stores the resulting InputData in ScreenManager via set_data(), and shows
-        Screen 2 (AnalysisMethodScreen). This implements the Screen 1 to 2 transition
-        in the Data Flow diagram (Section 3.2.1).
+        This is the 'Next ->' button handler and the final step of Screen 1 from Section 3.2.2. Calls Algorithm 1
+        (collect_file_data or collect_manual_data), stores the resulting InputData in ScreenManager via set_data(), and
+        shows Screen 2 (AnalysisMethodScreen). This implements the Screen 1 to 2 transition in the Data Flow diagram (Section 3.2.1).
         """
         try:
             if self.df is not None:
@@ -511,9 +498,8 @@ class DataInputScreen(tk.Frame):
         """
         Recursively enable or disable all widgets in a panel.
 
-        Used to enforce mutual exclusivity between Branch 1 and Branch 2 so
-        that data cannot accidentally be drawn from both sources at once
-        (Section 3.2.1 — only one input path should be active at a time).
+        Used to enforce mutual exclusivity between Branch 1 and Branch 2 so that data cannot accidentally be drawn from
+        both sources at once (Section 3.2.1 — only one input path should be active at a time).
         """
         bg = "white" if enabled else "#e5e7eb"
         fg = "#0f172a" if enabled else "#9ca3af"
@@ -535,9 +521,8 @@ if __name__ == "__main__":
     """
     Standalone launch for isolated testing of Screen 1 (Section 3.2.3 Stage 1).
 
-    Creates a 1100x700 window (matching the specification in Section 3.2.2) and
-    centres it on screen, then starts the tkinter event loop with DataInputScreen
-    as the root frame. This allows Screen 1 to be tested without loading the full
+    Creates a 1100x700 window (matching the specification in Section 3.2.2) and centres it on screen, then starts the 
+    tkinter event loop with DataInputScreen as the root frame. This allows Screen 1 to be tested without loading the full
     application — useful for the white-box test scenarios in Section 3.2.3.
     """
     root = tk.Tk()

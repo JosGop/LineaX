@@ -2,12 +2,10 @@
 Equations.py
 
 Defines the equation library and supporting data structures for LineaX.
-Corresponds to Section 3.2.1 (Sub-component: Scientific Equation Selection) and
-Section 3.2.2 (Structure of the Solution — Equation Handling module). The
-EquationLibrary implements the searchable equation dropdown described in the UI
-design (Screen 2: Analysis Method, Section 3.2.2). Physical constants are drawn
-from the OCR Physics A Data, Formulae and Relationships Booklet, as referenced
-throughout Section 3.1.3 and the proposed solution (Section 3.1.4).
+Corresponds to Section 3.2.1 (Sub-component: Scientific Equation Selection) and Section 3.2.2 (Structure of the Solution —
+Equation Handling module). The EquationLibrary implements the searchable equation dropdown described in the UI design
+(Screen 2: Analysis Method, Section 3.2.2). Physical constants are drawn from the OCR Physics A Data, Formulae and Relationships
+Booklet, as referenced throughout Section 3.1.3 and the proposed solution (Section 3.1.4).
 """
 
 from dataclasses import dataclass
@@ -17,9 +15,8 @@ import sympy as sp
 """
 Physical constants from the OCR Physics A Data, Formulae and Relationships Booklet.
 
-Listed here to satisfy the requirement in Section 3.1.3 (Research — Equation Handling
-and Interpretation) that the solution must support pre-populated scientific constants,
-eliminating the manual entry errors identified as a limitation of Excel and Prism.
+Listed here to satisfy the requirement in Section 3.1.3 (Research — Equation Handling and Interpretation) that the solution 
+must support pre-populated scientific constants, eliminating the manual entry errors identified as a limitation of Excel and Prism.
 All values are in SI units.
 """
 
@@ -44,10 +41,9 @@ CONSTANTS: Dict[str, float] = {
 Equation data structure.
 
 Stores the metadata required to display, search, and apply an equation.
-The transform_info dict captures the axis transformations and gradient/intercept
-meanings needed by Algorithm 2 (linearisation, Section 3.2.2) and Algorithm 5
-(gradient interpretation, Section 3.2.2). The linearisation_type field drives
-the correct branch selection in DataTransform.py.
+The transform_info dict captures the axis transformations and gradient/intercept meanings needed by Algorithm 2 (linearisation, 
+Section 3.2.2) and Algorithm 5 (gradient interpretation, Section 3.2.2). The linearisation_type field drives the correct 
+branch selection in DataTransform.py.
 """
 
 
@@ -56,11 +52,9 @@ class Equation:
     """
     Immutable record describing a single scientific equation in the library.
 
-    Each Equation instance encodes all information needed to: present the equation
-    to the user (name, expression, variables), select the correct linearisation
-    path (linearisation_type), and interpret gradient/intercept physically
-    (transform_info). Used by EquationLibrary and AnalysisMethod.py. Defined as
-    frozen to prevent accidental mutation after construction.
+    Each Equation instance encodes all information needed to: present the equation to the user (name, expression, variables),
+    select the correct linearisation path (linearisation_type), and interpret gradient/intercept physically (transform_info).
+    Used by EquationLibrary and AnalysisMethod.py. Defined as frozen to prevent accidental mutation after construction.
     """
     name: str             # human-readable label shown in the equation dropdown
     expression: str       # equation as a parseable string, e.g. "v = u + a*t"
@@ -78,12 +72,11 @@ class ScientificEquation:
     """
     Represents a scientific equation and its linearised y = mx + c form.
 
-    Implements the 'Linearise to the form y = mx + c' sub-component described in
-    Section 3.2.1 (Branch 3 — Linear) and Algorithm 2 from Section 3.2.2. After
-    set_linearisation() is called, all axis and coefficient metadata is available
-    for the graph display and gradient analysis screens (Sections 3.2.2 UI design,
-    Screens 3a and 4). Note: a separate ScientificEquation class also exists in
-    LineaX_Classes.py as a stub; this version in Equations.py is the full implementation.
+    Implements the 'Linearise to the form y = mx + c' sub-component described in Section 3.2.1 (Branch 3 — Linear) and
+    Algorithm 2 from Section 3.2.2. After set_linearisation() is called, all axis and coefficient metadata is available
+    for the graph display and gradient analysis screens (Sections 3.2.2 UI design, Screens 3a and 4).
+    Note: a separate ScientificEquation class also exists in LineaX_Classes.py as a stub; this version in Equations.py
+    is the full implementation.
     """
 
     def __init__(self, original_equation: str):
@@ -105,9 +98,8 @@ class ScientificEquation:
         """
         Set all linearisation information at once.
 
-        Called after Algorithm 2 (Section 3.2.2) completes transformation. Stores the
-        SymPy equation alongside the physical meanings of each term, which are then
-        retrieved by GradientAnalysis.py to populate the 'Gradient Analysis & Results'
+        Called after Algorithm 2 (Section 3.2.2) completes transformation. Stores the SymPy equation alongside the physical
+        meanings of each term, which are then retrieved by GradientAnalysis.py to populate the 'Gradient Analysis & Results'
         screen (Section 3.2.2, Screen 4).
         """
         self.linearised_equation = linearised_eq
@@ -120,9 +112,8 @@ class ScientificEquation:
         """
         Return (x_axis_label, y_axis_label) for the graph.
 
-        Labels reflect any transformation applied (e.g., "ln(Force)"), satisfying the
-        requirement in Section 3.2.1 (Sub-sub-component: Assign apt. x and y values)
-        that axis labels update automatically after linearisation.
+        Labels reflect any transformation applied (e.g., "ln(Force)"), satisfying the requirement in Section 3.2.1
+        (Sub-sub-component: Assign apt. x and y values) that axis labels update automatically after linearisation.
         """
         return self.x_symbol or "x", self.y_symbol or "y"
 
@@ -138,12 +129,10 @@ class ScientificEquation:
 """
 Equation library storing OCR Physics A syllabus equations from Modules 3–6.
 
-Implements the 'Scientific Equation Selection' sub-component from Section 3.2.1
-(Branch 3 — Linear). The library satisfies the success criterion (Section 3.1.4)
-requiring pre-stored equations with correct physical variable mappings. An inverted
-keyword index is built at construction for O(k) average-case search, where k is
-the number of query tokens, matching the efficiency requirement raised in Section
-3.1.4 (Measurable Success Criteria).
+Implements the 'Scientific Equation Selection' sub-component from Section 3.2.1 (Branch 3 — Linear). The library satisfies 
+the success criterion (Section 3.1.4) requiring pre-stored equations with correct physical variable mappings. An inverted
+keyword index is built at construction for O(k) average-case search, where k is the number of query tokens, matching the 
+efficiency requirement raised in Section 3.1.4 (Measurable Success Criteria).
 """
 
 
@@ -151,9 +140,8 @@ class EquationLibrary:
     """
     Searchable library of OCR Physics A equations from Modules 3–6.
 
-    Addresses the limitation identified in Section 3.1.3 (Research) that Excel and
-    Prism do not interpret gradients or intercepts in scientific context. Each stored
-    Equation includes physical variable meanings and gradient/intercept interpretations
+    Addresses the limitation identified in Section 3.1.3 (Research) that Excel and Prism do not interpret gradients or
+    intercepts in scientific context. Each stored Equation includes physical variable meanings and gradient/intercept interpretations
     so LineaX can contextualise results on Screen 4 (Section 3.2.2, User Interface).
     The inverted index supports the search bar in Screen 2 (Analysis Method).
     """
@@ -167,9 +155,8 @@ class EquationLibrary:
         """
         Load all equations from Modules 3–6 of the OCR Physics A syllabus.
 
-        Equations are grouped by module and tagged with linearisation_type to drive
-        Algorithm 2 (Section 3.2.2) and transform_info for gradient interpretation
-        on Screen 4. Exponential equations include explicit transform metadata
+        Equations are grouped by module and tagged with linearisation_type to drive Algorithm 2 (Section 3.2.2) and
+        transform_info for gradient interpretation on Screen 4. Exponential equations include explicit transform metadata
         corresponding to the worked examples in Section 3.2.1 (Linearise sub-component).
         """
         self._equations = [
@@ -321,10 +308,9 @@ class EquationLibrary:
         """
         Build an inverted keyword index for O(k) average search, where k = number of query tokens.
 
-        Implements the efficient search described in Section 3.2.2 (Structure of the Solution)
-        to support the equation search bar in Screen 2 (Analysis Method). Tokens are drawn
-        from equation names, expression tokens, symbol names, and variable meanings, enabling
-        multi-term search such as "radioactive decay" or "spring constant".
+        Implements the efficient search described in Section 3.2.2 (Structure of the Solution) to support the equation search
+        bar in Screen 2 (Analysis Method). Tokens are drawn from equation names, expression tokens, symbol names, and variable
+        meanings, enabling multi-term search such as "radioactive decay" or "spring constant".
         """
         for idx, eq in enumerate(self._equations):
             tokens = set(eq.name.lower().split())
@@ -339,10 +325,9 @@ class EquationLibrary:
         """
         Search equations using keyword intersection; returns equations matching all query tokens.
 
-        Implements the equation search bar functionality from Screen 2 (Section 3.2.2, User
-        Interface). Uses set intersection so only equations matching every query token are
-        returned, reducing false positives. Returns an empty list immediately if any token
-        is not in the index, avoiding unnecessary iteration.
+        Implements the equation search bar functionality from Screen 2 (Section 3.2.2, User Interface). Uses set intersection
+        so only equations matching every query token are returned, reducing false positives. Returns an empty list immediately
+        if any token is not in the index, avoiding unnecessary iteration.
         """
         if not query:
             return []

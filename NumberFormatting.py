@@ -2,14 +2,12 @@
 NumberFormatting.py
 
 Utility functions for displaying numerical values consistently across LineaX.
-Implements the number display requirements from Section 3.2.2 (Key Variables,
-Data Structures, and Validation) — specifically the annotation_text, gradient,
-gradient_uncertainty, and R_squared variables, which must be formatted to a
-consistent number of significant figures. The standard form threshold (exponent
-outside [-3, 4]) corresponds to the sig_figs validation rule in user_settings
-(Section 3.2.2). Also satisfies the success criterion in Section 3.1.4 (Measurable
-Success Criteria) that results must be presented to an appropriate number of
-significant figures, with correct scientific notation for very large or small values.
+Implements the number display requirements from Section 3.2.2 (Key Variables,Data Structures, and Validation) — specifically
+the annotation_text, gradient, gradient_uncertainty, and R_squared variables, which must be formatted to a consistent number
+of significant figures. The standard form threshold (exponent outside [-3, 4]) corresponds to the sig_figs validation rule
+in user_settings (Section 3.2.2). Also satisfies the success criterion in Section 3.1.4 (Measurable Success Criteria) that
+results must be presented to an appropriate number of significant figures, with correct scientific notation for very large
+or small values.
 """
 
 import math
@@ -23,9 +21,8 @@ def format_exponent(exponent: int) -> str:
     """
     Return the exponent as a superscript Unicode string.
 
-    Used by format_number() to render standard form notation (e.g., ×10⁻⁴) in
-    graph annotations and results panels. Unicode superscripts ensure the notation
-    displays correctly in Tkinter labels without requiring LaTeX rendering, consistent
+    Used by format_number() to render standard form notation (e.g., ×10⁻⁴) in graph annotations and results panels.
+    Unicode superscripts ensure the notation displays correctly in Tkinter labels without requiring LaTeX rendering, consistent
     with the accessibility requirements in Section 3.1.4 (Limitations).
     """
     return str(exponent).translate(_SUPERSCRIPT)
@@ -35,13 +32,11 @@ def format_number(value: float, sig_figs: int = 4) -> str:
     """
     Format a number using decimal notation or standard form.
 
-    Implements the number display logic required across multiple screens: the gradient
-    and intercept values on Screen 3a (Linear Graph Output), the R² value on Screen 3b
-    (Automated Graph Output), and the physical constant results on Screen 4 (Gradient
-    Analysis & Results), all described in Section 3.2.2 (User Interface). Switches
-    between decimal and standard form based on the exponent range, consistent with the
-    sig_figs validation rule (2–6) from the user_settings variable in the Key Variables
-    table (Section 3.2.2).
+    Implements the number display logic required across multiple screens: the gradient and intercept values on Screen 3a
+    (Linear Graph Output), the R² value on Screen 3b (Automated Graph Output), and the physical constant results on Screen 4
+    (Gradient Analysis & Results), all described in Section 3.2.2 (User Interface). Switches between decimal and standard
+    form based on the exponent range, consistent with the sig_figs validation rule (2–6) from the user_settings variable
+    in the Key Variables table (Section 3.2.2).
 
     Uses decimal notation when -3 ≤ exponent ≤ 4; standard form (×10ⁿ) otherwise.
 
@@ -90,12 +85,12 @@ def format_number_with_uncertainty(value: float, uncertainty: float, sig_figs: i
     """
     Format a value with its uncertainty as "value ± uncertainty".
 
-    Used to display the gradient and physical constant results on Screen 4 (Section
-    3.2.2, User Interface — Gradient Analysis & Results), e.g. "k = 48.5 ± 2.1 N/m".
-    Also used for the gradient_uncertainty variable from the Key Variables table
-    (Section 3.2.2), which is computed by Algorithm 5 (worst-fit line calculation).
-    Handles NaN and Inf uncertainties gracefully, as required by the validation rule
-    that gradient_uncertainty must be non-negative (Section 3.2.2, Key Variables).
+    Used to display the gradient and physical constant results on Screen 4 (Sectionm 3.2.2, User Interface — Gradient Analysis
+    & Results), e.g. "k = 48.5 ± 2.1 N/m".
+    Also used for the gradient_uncertainty variable from the Key Variables table (Section 3.2.2), which is computed by
+    Algorithm 5 (worst-fit line calculation).
+    Handles NaN and Inf uncertainties gracefully, as required by the validation rule that gradient_uncertainty must be
+    non-negative (Section 3.2.2, Key Variables).
 
     Args:
         value: The measured value.
@@ -121,9 +116,8 @@ def format_percentage(value: float, decimal_places: int = 2) -> str:
     """
     Return a percentage string, e.g. "5.23%".
 
-    Used to display the percentage difference between experimental and accepted values
-    on Screen 4 (Section 3.2.2, Section 3: Compare with Known Value), computed as
-    |(experimental - accepted) / accepted| × 100%.
+    Used to display the percentage difference between experimental and accepted values on Screen 4 (Section 3.2.2, Section 3:
+    Compare with Known Value), computed as |(experimental - accepted) / accepted| × 100%.
     """
     return f"{value:.{decimal_places}f}%"
 
@@ -132,11 +126,9 @@ def format_scientific_for_display(value: float) -> str:
     """
     Format a number for display in equations using ^ notation.
 
-    Alternative to format_number() for contexts where Unicode superscripts may not
-    render correctly, such as equation annotation strings (annotation_text variable,
-    Section 3.2.2 Key Variables) that are passed to Matplotlib ax.annotate(). Uses
-    ×10^n notation instead of Unicode superscripts to ensure compatibility across
-    rendering backends.
+    Alternative to format_number() for contexts where Unicode superscripts may not render correctly, such as equation
+    annotation strings (annotation_text variable, Section 3.2.2 Key Variables) that are passed to Matplotlib ax.annotate().
+    Uses ×10^n notation instead of Unicode superscripts to ensure compatibility across rendering backends.
 
     Returns:
         Formatted string, e.g. "5.09×10^-2" or "510.79".
@@ -165,11 +157,10 @@ if __name__ == "__main__":
     """
     Manual test cases for white-box testing during Stage 1 development (Section 3.2.3).
 
-    Each case corresponds to a boundary or typical value from the Extreme Values and
-    Computation Accuracy test scenarios in the Stage 1 testing table (Section 3.2.3).
-    Verifies that format_number() correctly switches between decimal and standard form
-    at the ±3/4 exponent boundaries, and that format_number_with_uncertainty() produces
-    the ± notation expected on Screen 4 (Section 3.2.2, User Interface).
+    Each case corresponds to a boundary or typical value from the Extreme Values and Computation Accuracy test scenarios 
+    in the Stage 1 testing table (Section 3.2.3). Verifies that format_number() correctly switches between decimal and standard 
+    form at the ±3/4 exponent boundaries, and that format_number_with_uncertainty() produces the ± notation expected on 
+    Screen 4 (Section 3.2.2, User Interface).
     """
     print("Number Formatting Tests")
 

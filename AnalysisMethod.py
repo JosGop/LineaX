@@ -4,21 +4,16 @@ AnalysisMethod.py
 Screen 2 of the LineaX application — presents the user with the two analysis
 pathways described in Section 3.2.1 (Branch 3):
 
-    Left panel  — Linear Graph Analysis: the user searches the EquationLibrary
-                  (or enters a custom equation), selects the two measured variables
-                  by clicking them, optionally specifies a variable to find, then
-                  triggers linearisation.  The screen calls DataTransformer and
-                  stores the result in ScreenManager before handing off to
-                  LinearGraphResultsScreen.
+    Left panel  — Linear Graph Analysis: the user searches the EquationLibrary (or enters a custom equation), selects
+    the two measured variables by clicking them, optionally specifies a variable to find, then triggers linearisation.
+    The screen calls DataTransformer and stores the result in ScreenManager before handing off to LinearGraphResultsScreen.
 
-    Right panel — Automated Model Selection: displays nine model cards; selecting
-                  any one navigates directly to AutomatedGraphResultsScreen without
-                  equation configuration.
+    Right panel — Automated Model Selection: displays nine model cards; selecting any one navigates directly to
+    AutomatedGraphResultsScreen without equation configuration.
 
-Implements Algorithm 2 (Section 3.2.2 — Linearise to the form y = mx + c) through
-the _linearise_equation / _attempt_linearisation pipeline, and the 'Assign apt. x
-and y values' sub-component by scoring two candidate variable orderings and choosing
-the one that better satisfies standard physics conventions.
+Implements Algorithm 2 (Section 3.2.2 — Linearise to the form y = mx + c) through the _linearise_equation / _attempt_linearisation
+pipeline, and the 'Assign apt. x and y values' sub-component by scoring two candidate variable orderings and choosing the
+one that better satisfies standard physics conventions.
 """
 
 import re
@@ -40,13 +35,12 @@ from LinearGraphDisplay import LinearGraphResultsScreen
 from AutomatedGraphDisplay import AutomatedGraphResultsScreen
 from ManagingScreens import ScreenManager, make_scrollable
 
-# SymPy parser transformations — enables implicit multiplication (e.g. "2x" → "2*x")
-# as described in Section 3.3 (Linearising Equations).
+# SymPy parser transformations — enables implicit multiplication (e.g. "2x" → "2*x") as described in Section 3.3 (Linearising Equations).
 TRANSFORMS = standard_transformations + (implicit_multiplication_application,)
 
-# Maps common text representations and Unicode Greek letters to their canonical
-# SymPy-compatible forms.  Defined at module level so both _enter_custom_equation
-# and _linearise_equation can share the same single source of truth.
+
+# Maps common text representations and Unicode Greek letters to their canonical SymPy-compatible forms.
+# Defined at module level so both _enter_custom_equation and _linearise_equation can share the same single source of truth.
 _GREEK_REPLACEMENTS = {
     "lambda": "lambda_",
     "Lambda": "lambda_",
@@ -65,8 +59,7 @@ _GREEK_REPLACEMENTS = {
     "Δ":      "Delta",
 }
 
-# Maps the same Greek identifiers to their display Unicode characters, used when
-# populating variable description labels in _enter_custom_equation.
+# Maps the same Greek identifiers to their display Unicode characters, used when populating variable description labels in _enter_custom_equation.
 _GREEK_DISPLAY_DESCRIPTIONS = {
     "λ":  "wavelength or decay constant",
     "lam":  "wavelength or decay constant",
@@ -87,10 +80,9 @@ def _apply_greek_replacements(text: str) -> str:
     """
     Replace all Greek letter representations in text with SymPy-safe ASCII forms.
 
-    Centralises the substitution logic previously duplicated across
-    _enter_custom_equation and _linearise_equation.  The replacement order
-    follows longest-match-first to prevent partial substitutions (e.g. 'lambda'
-    must be replaced before a hypothetical single-char sweep).
+    Centralises the substitution logic previously duplicated across _enter_custom_equation and _linearise_equation.
+    The replacement order follows longest-match-first to prevent partial substitutions (e.g. 'lambda' must be replaced
+    before a hypothetical single-char sweep).
 
     Args:
         text: Raw equation string that may contain 'lambda', 'μ', 'θ', etc.
@@ -107,35 +99,31 @@ class AnalysisMethodScreen(tk.Frame):
     """
     Screen 2: Analysis Method selection and equation linearisation.
 
-    Defined in Section 3.3 Development (Stage 3).  Implements the two analysis
-    branches described in Section 3.2.1:
+    Defined in Section 3.3 Development (Stage 3). Implements the two analysis  branches described in Section 3.2.1:
 
-      * Branch 3 — Linear: EquationLibrary search → variable selection →
-        linearisation via _linearise_equation → data transformation via
-        DataTransformer → navigate to LinearGraphResultsScreen.
+      * Branch 3 — Linear: EquationLibrary search → variable selection → linearisation via _linearise_equation
+      → data transformation via DataTransformer → navigate to LinearGraphResultsScreen.
 
-      * Branch 3 — Automated: model card selection → navigate directly to
-        AutomatedGraphResultsScreen.
+      * Branch 3 — Automated: model card selection → navigate directly to AutomatedGraphResultsScreen.
 
-    The screen retrieves the validated InputData deposited in ScreenManager by
-    DataInputScreen (Screen 1) and stores a DataTransformer instance so that
-    transformed datasets can be accessed by generate_graph() without re-computation.
+    The screen retrieves the validated InputData deposited in ScreenManager by DataInputScreen (Screen 1) and stores a
+    DataTransformer instance so that transformed datasets can be accessed by generate_graph() without re-computation.
     """
 
     def __init__(self, parent, manager: ScreenManager):
         super().__init__(parent, bg="#f5f6f8", padx=20, pady=20)
         self.manager = manager
 
-        # EquationLibrary provides the searchable catalogue of scientific equations
-        # defined in Equations.py, corresponding to Section 3.2.1 (Scientific Equation
-        # Selection sub-component).
+        """
+        EquationLibrary provides the searchable catalogue of scientific equations defined in Equations.py, corresponding 
+        to Section 3.2.1 (Scientific Equation Selection sub-component).
+        """
         self.library = EquationLibrary()
 
         # Currently active Equation object from the library or custom entry
         self.selected_equation: Optional[Equation] = None
 
-        # ScientificEquation stores the symbolic linearised form and its physical
-        # interpretation (m_meaning, c_meaning) after _linearise_equation completes.
+        # ScientificEquation stores the symbolic linearised form and its physical interpretation (m_meaning, c_meaning) after _linearise_equation completes.
         self.scientific_equation: Optional[ScientificEquation] = None
 
         # Set of variable names the user has selected by clicking in the equation canvas
@@ -155,10 +143,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Retrieve validated InputData from ScreenManager and initialise DataTransformer.
 
-        Called once during __init__.  Mirrors the 'Retrieve raw data' step in the
-        Data Flow diagram (Section 3.2.1).  Stores raw_data in ScreenManager via
-        set_raw_data() so it can be recovered by revert_to_raw_data() or the
-        'Fit other Models' workflow (Section 3.2.1, Branch 4) without re-importing.
+        Called once during __init__. Mirrors the 'Retrieve raw data' step in the Data Flow diagram (Section 3.2.1).
+        Stores raw_data in ScreenManager via set_raw_data() so it can be recovered by revert_to_raw_data() or the 'Fit other
+        Models' workflow (Section 3.2.1, Branch 4) without re-importing.
         Warns the user and skips transformer initialisation if no data was passed.
         """
         self.raw_data = self.manager.get_data()
@@ -176,11 +163,11 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Build the top-level window layout: navigation bar, title, and two-column panel.
 
-        The two columns correspond to the two analysis pathways in Section 3.2.1
-        (Branch 3 — Linear and Automated).  Both columns are equally weighted via
-        grid_columnconfigure so the panels share available horizontal space, consistent
+        The two columns correspond to the two analysis pathways in Section 3.2.1 (Branch 3 — Linear and Automated).
+        Both columns are equally weighted via grid_columnconfigure so the panels share available horizontal space, consistent
         with the Screen 2 mockup in Section 3.2.2 (User Interface).
         """
+
         # Navigation bar with back button
         nav_bar = tk.Frame(self, bg="#f5f6f8")
         nav_bar.pack(fill="x", pady=(0, 10))
@@ -222,15 +209,12 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Build the scrollable Linear Graph Analysis panel (left column).
 
-        Contains: equation search box, results listbox, custom equation entry,
-        clickable variable canvas, selected variables indicator, 'Value to Find'
-        combobox, 'Linearise Equation' button, linearised result display, constants
-        frame, units frame, and 'Generate Linear Graph' button.
+        Contains: equation search box, results listbox, custom equation entry, clickable variable canvas, selected variables indicator,
+        'Value to Find' combobox, 'Linearise Equation' button, linearised result display, constants frame, units frame
+        and 'Generate Linear Graph' button.
 
-        The constants, units, and generate-graph widgets are created here but kept
-        hidden (pack_forget) until _linearise_equation reveals them, implementing
-        the progressive disclosure pattern described in Section 3.2.2 (User Interface
-        — Screen 2).
+        The constants, units, and generate-graph widgets are created here but kept hidden (pack_forget) until _linearise_equation
+        reveals them, implementing the progressive disclosure pattern described in Section 3.2.2 (User Interface — Screen 2).
         """
         _, panel, _, _ = make_scrollable(
             parent,
@@ -378,10 +362,10 @@ class AnalysisMethodScreen(tk.Frame):
         )
         self.linearised_info_label.pack(fill="both", expand=True)
 
-        # Constants section — hidden until _linearise_equation reveals it;
-        # populated by _update_constants_post_linearisation to show only the
-        # constants that cannot be derived from the graph (Section 3.2.1,
-        # Manipulate user values if required).
+        """
+        Constants section — hidden until _linearise_equation reveals it; populated by _update_constants_post_linearisation 
+        to show only the constants that cannot be derived from the graph (Section 3.2.1, Manipulate user values if required).
+        """
         self.constants_frame = tk.LabelFrame(
             panel,
             text="Required Constants",
@@ -420,10 +404,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Build the scrollable Automated Model Selection panel (right column).
 
-        Renders a card for each of the nine supported regression models and a
-        'Generate Graph' button that navigates to AutomatedGraphResultsScreen,
-        implementing the 'Automated' sub-component of Section 3.2.1 (Branch 3)
-        and Algorithm 8 (Section 3.2.2 — automated model comparison via R²).
+        Renders a card for each of the nine supported regression models and a 'Generate Graph' button that navigates to
+        AutomatedGraphResultsScreen, implementing the 'Automated' sub-component of Section 3.2.1 (Branch 3) and Algorithm 8
+        (Section 3.2.2 — automated model comparison via R²).
         """
         _, panel, _, _ = make_scrollable(
             parent,
@@ -486,11 +469,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Render a single model card showing the model name, equation, and description.
 
-        Each card is a rounded-corner-style Frame with a coloured left border strip
-        that visually distinguishes models, matching the Screen 2 mockup in Section
-        3.2.2 (User Interface).  Cards are purely informational — selection is
-        implicit; clicking 'Generate Graph' passes all models to AutomatedGraphResultsScreen
-        which runs Algorithm 8 to select the best fit.
+        Each card is a rounded-corner-style Frame with a coloured left border strip that visually distinguishes models,
+        matching the Screen 2 mockup in Section 3.2.2 (User Interface). Cards are purely informational — selection is implicit;
+        clicking 'Generate Graph' passes all models to AutomatedGraphResultsScreen which runs Algorithm 8 to select the best fit.
 
         Args:
             parent: Parent widget to pack the card into.
@@ -552,9 +533,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Validate data availability and navigate to AutomatedGraphResultsScreen.
 
-        Implements the navigation step for the Automated pathway in Section 3.2.1
-        (Branch 3 — Automated).  The actual model fitting (Algorithm 8, Section 3.2.2)
-        is performed by AutomatedGraphResultsScreen once it has access to the InputData
+        Implements the navigation step for the Automated pathway in Section 3.2.1 (Branch 3 — Automated). The actual model
+        fitting (Algorithm 8, Section 3.2.2) is performed by AutomatedGraphResultsScreen once it has access to the InputData
         stored in ScreenManager.
         """
         if self.raw_data is None:
@@ -570,9 +550,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Update the results_box with equations matching the current search text.
 
-        Bound to <KeyRelease> on the search entry.  Delegates to EquationLibrary.search()
-        which performs a case-insensitive substring match on equation names and expressions,
-        as described in Section 3.2.1 (Scientific Equation Selection sub-component).
+        Bound to <KeyRelease> on the search entry. Delegates to EquationLibrary.search() which performs a case-insensitive
+        substring match on equation names and expressions, as described in Section 3.2.1 (Scientific Equation Selection sub-component).
         Skips the query if the placeholder text is still present.
         """
         query = self.search_entry.get()
@@ -588,11 +567,10 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Open a Toplevel dialog for the user to enter an equation not in the library.
 
-        Implements the 'Custom Equation' sub-branch of Section 3.2.1 (Branch 2).
-        Parses the submitted string using _apply_greek_replacements() and a regex
-        variable extractor, then constructs an Equation object with linearisation_type
-        'custom' so downstream components handle it appropriately.  On success the
-        dialog closes and the clickable equation canvas is refreshed.
+        Implements the 'Custom Equation' sub-branch of Section 3.2.1 (Branch 2). Parses the submitted string using
+        _apply_greek_replacements() and a regex variable extractor, then constructs an Equation object with linearisation_type
+        'custom' so downstream components handle it appropriately. On success the dialog closes and the clickable
+        equation canvas is refreshed.
         """
         dialog = tk.Toplevel(self)
         dialog.title("Enter Custom Equation")
@@ -626,11 +604,10 @@ class AnalysisMethodScreen(tk.Frame):
             """
             Validate and parse the user-supplied equation string.
 
-            Replaces Greek text with safe identifiers, extracts variable names via
-            regex, assigns descriptions from _GREEK_DISPLAY_DESCRIPTIONS where
-            available, and constructs the Equation object.  Displays a warning for
-            equations with fewer than two variables or a parse error for malformed
-            strings, consistent with the input validation requirements in Section 3.1.4.
+            Replaces Greek text with safe identifiers, extracts variable names via regex, assigns descriptions from
+            _GREEK_DISPLAY_DESCRIPTIONS where available, and constructs the Equation object. Displays a warning for
+            equations with fewer than two variables or a parse error for malformed strings, consistent with the input
+            validation requirements in Section 3.1.4.
             """
             equation_str = equation_entry.get().strip()
             if not equation_str or "=" not in equation_str:
@@ -713,9 +690,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Handle a listbox selection event: load the chosen Equation and refresh the UI.
 
-        Searches the EquationLibrary for an exact name match on the selected row,
-        resets the variable selection state, and re-draws the clickable equation canvas.
-        Corresponds to the 'Scientific Equation Selection' sub-component in Section 3.2.1.
+        Searches the EquationLibrary for an exact name match on the selected row, resets the variable selection state and
+        re-draws the clickable equation canvas. Corresponds to the 'Scientific Equation Selection' sub-component in Section 3.2.1.
         """
         if not self.results_box.curselection():
             return
@@ -745,11 +721,10 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Render the selected equation onto the canvas with variable tokens as buttons.
 
-        Implements the 'Assign apt. x and y values' UI interaction from Section 3.2.1:
-        each recognised variable is drawn as a clickable tk.Button (highlighted when
-        selected) so the user can indicate which two quantities they measured.  Non-variable
-        tokens (operators, numbers) are drawn as canvas text items.  The canvas is cleared
-        and fully redrawn on every call so selection state is always consistent.
+        Implements the 'Assign apt. x and y values' UI interaction from Section 3.2.1: each recognised variable is drawn
+        as a clickable tk.Button (highlighted when selected) so the user can indicate which two quantities they measured.
+        Non-variable tokens (operators, numbers) are drawn as canvas text items. The canvas is cleared and fully redrawn
+        on every call so selection state is always consistent.
         """
         self.equation_canvas.delete("all")
 
@@ -812,10 +787,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Toggle selection state of a variable in the clickable equation canvas.
 
-        Enforces a maximum of two selected variables (one for each axis), which is
-        the minimum required to produce a two-variable linearised form as described
-        in Section 3.2.1 (Assign apt. x and y values).  Warns the user before
-        preventing a third selection.
+        Enforces a maximum of two selected variables (one for each axis), which is the minimum required to produce a two-variable
+        linearised form as described in Section 3.2.1 (Assign apt. x and y values). Warns the user before preventing a third
+        selection.
 
         Args:
             var: Variable symbol string (e.g., 'I', 'λ') whose state is being toggled.
@@ -845,9 +819,8 @@ class AnalysisMethodScreen(tk.Frame):
           - Yellow (#fef3c7): one variable selected — prompts for second.
           - Green (#d1fae5):  two variables selected — ready to linearise.
 
-        Displayed text lists each variable symbol and its physical meaning from
-        self.selected_equation.variables, satisfying the usability requirement in
-        Section 3.1.4 (the UI must clearly communicate analysis state).
+        Displayed text lists each variable symbol and its physical meaning from self.selected_equation.variables, satisfying
+        the usability requirement in Section 3.1.4 (the UI must clearly communicate analysis state).
         """
         if len(self.selected_vars) == 0:
             text = "Click on variables in the equation above that you have measured in your experiment"
@@ -871,16 +844,14 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Rebuild the constants input section after linearisation.
 
-        Only asks for constants that cannot be determined from the graph itself —
-        for example, in I = I₀·exp(−μx) both μ and I₀ can be read from the
-        gradient and intercept respectively, so no constants are required.
-        This mirrors the 'Manipulate user values if required' guard described in
-        Section 3.2.1.
+        Only asks for constants that cannot be determined from the graph itself — for example, in I = I₀·exp(−μx) both μ
+        and I₀ can be read from the gradient and intercept respectively, so no constants are required.
+        This mirrors the 'Manipulate user values if required' guard described in Section 3.2.1.
 
-        For exponential equations all non-measured variables are treated as
-        findable from the graph structure; for other equation types only the
-        explicitly selected and find variables are excluded.
+        For exponential equations all non-measured variables are treated as findable from the graph structure; for other
+        equation types only the explicitly selected and find variables are excluded.
         """
+
         # Clear stale widgets from any previous linearisation
         for widget in self.constants_frame.winfo_children():
             widget.destroy()
@@ -960,11 +931,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Rebuild the measurement units input section after linearisation.
 
-        Renders one row per measured axis variable with an Entry pre-filled with
-        'Units'.  The values entered here are stored in equation_info['measurement_units']
-        and forwarded to GradientAnalysis.py for display and potential unit conversion
-        on Screen 4 (Section 3.2.2, User Interface — Screen 4, Section 2: Calculated
-        Unknown Value).
+        Renders one row per measured axis variable with an Entry pre-filled with 'Units'. The values entered here are stored
+        in equation_info['measurement_units'] and forwarded to GradientAnalysis.py for display and potential unit conversion
+        on Screen 4 (Section 3.2.2, User Interface — Screen 4, Section 2: Calculated Unknown Value).
 
         Args:
             x_var: Symbol name of the variable assigned to the x-axis.
@@ -1024,8 +993,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Refresh the 'Value to Find' combobox with variables not currently being measured.
 
-        Only unmeasured variables can be solved for from the gradient or intercept,
-        consistent with the 'Value to Find' sub-component of Section 3.2.1 (Branch 3).
+        Only unmeasured variables can be solved for from the gradient or intercept, consistent with the 'Value to Find'
+        sub-component of Section 3.2.1 (Branch 3).
         Falls back gracefully if no equation is selected.
         """
         if not self.selected_equation:
@@ -1042,10 +1011,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Return the pre-defined value for a recognised physical constant symbol.
 
-        Delegates to the CONSTANTS dict imported from Equations.py, which maps
-        symbols such as 'e', 'h', 'c', 'k_B' to their SI values.  Returns None
-        if the symbol is not a known constant, leaving the entry field blank for
-        the user to fill in.
+        Delegates to the CONSTANTS dict imported from Equations.py, which maps symbols such as 'e', 'h', 'c', 'k_B'
+        to their SI values. Returns None if the symbol is not a known constant, leaving the entry field blank for the user to fill in.
 
         Args:
             symbol: Variable symbol string from the selected equation.
@@ -1059,8 +1026,7 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Linearise the selected equation and update the UI with the result.
 
-        Main handler for the 'Linearise Equation' button.  Implements the full
-        Algorithm 2 pipeline from Section 3.2.2:
+        Main handler for the 'Linearise Equation' button. Implements the full Algorithm 2 pipeline from Section 3.2.2:
 
           1. Validate that an equation and exactly two variables are selected.
           2. Parse the equation string into a SymPy Eq using _apply_greek_replacements.
@@ -1070,8 +1036,8 @@ class AnalysisMethodScreen(tk.Frame):
           6. Store the linearised ScientificEquation and transformed data.
           7. Display the result and reveal the constants, units, and generate buttons.
 
-        Raises a user-facing error dialog if the equation cannot be parsed or if
-        the data transformation fails (e.g., log of a negative value).
+        Raises a user-facing error dialog if the equation cannot be parsed or if the data transformation fails
+        (e.g., log of a negative value).
         """
         if not self.selected_equation:
             messagebox.showwarning("No Equation", "Please select an equation first.")
@@ -1142,11 +1108,9 @@ class AnalysisMethodScreen(tk.Frame):
             """
             Heuristic scoring function: lower score indicates a more suitable linearisation.
 
-            Penalises orderings where both axes are transformed (+10) or where the
-            independent variable ends up on the Y-axis (+3), and rewards orderings
-            where only the Y-axis is transformed (−1) and recognised independent
-            variables are on the X-axis (−2 each), following standard physics
-            convention as cited in Section 3.2.1 (Assign apt. x and y values).
+            Penalises orderings where both axes are transformed (+10) or where the independent variable ends up on the
+            Y-axis (+3), and rewards orderings where only the Y-axis is transformed (−1) and recognised independent variables
+            are on the X-axis (−2 each), following standard physics convention as cited in Section 3.2.1 (Assign apt. x and y values).
 
             Args:
                 result: Tuple from _attempt_linearisation or None.
@@ -1246,11 +1210,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Build the equation_info dict and navigate to LinearGraphResultsScreen.
 
-        Called when the user clicks 'Generate Linear Graph'.  Collects gradient and
-        intercept metadata, user-entered constants, and measurement units, then stores
-        them in ScreenManager via set_equation_info() so Screen 3a and Screen 4 can
-        display and interpret the regression output correctly (Section 3.2.2, User
-        Interface — Screen 4, Section 1: Selected Equation).
+        Called when the user clicks 'Generate Linear Graph'. Collects gradient and intercept metadata, user-entered constants,
+        and measurement units, then stores them in ScreenManager via set_equation_info() so Screen 3a and Screen 4 can display
+        and interpret the regression output correctly (Section 3.2.2, User Interface — Screen 4, Section 1: Selected Equation).
         """
         if self.transformed_data is None:
             messagebox.showwarning(
@@ -1319,14 +1281,12 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Return the variable name and unit string for either the gradient or intercept.
 
-        Consolidates the logic previously split across two near-identical methods
-        (_extract_gradient_info, _extract_intercept_info).  Reads the symbolic
-        meaning stored in ScientificEquation after linearisation, falls back to a
-        generic label when no equation is selected, and applies heuristic unit
-        inference for common equation types (decay → s⁻¹, attenuation → m⁻¹).
+        Consolidates the logic previously split across two near-identical methods (_extract_gradient_info, _extract_intercept_info).
+        Reads the symbolic meaning stored in ScientificEquation after linearisation, falls back to a generic label when
+        no equation is selected, and applies heuristic unit inference for common equation types (decay → s⁻¹, attenuation → m⁻¹).
 
-        Used by generate_graph() to populate the equation_info dict passed to Screen 4
-        (Section 3.2.2, User Interface — Screen 4, Section 1: Selected Equation).
+        Used by generate_graph() to populate the equation_info dict passed to Screen 4 (Section 3.2.2, User Interface —
+        Screen 4, Section 1: Selected Equation).
 
         Args:
             role: Either "gradient" or "intercept".
@@ -1360,11 +1320,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Return the x and y variable names from the current selection.
 
-        Simple helper that converts the selected_vars set (unordered) into a
-        deterministic (x, y) tuple, used by _attempt_linearisation before the
-        scoring step picks the preferred ordering.  Raises ValueError if fewer
-        than two variables are selected, which should not occur in normal flow
-        since _linearise_equation validates selection count first.
+        Simple helper that converts the selected_vars set (unordered) into a deterministic (x, y) tuple, used by
+        _attempt_linearisation before the scoring step picks the preferred ordering. Raises ValueError if fewer than two
+        variables are selected, which should not occur in normal flow since _linearise_equation validates selection count first.
 
         Returns:
             Tuple of (x_variable_name, y_variable_name).
@@ -1378,9 +1336,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Return the data currently in use for analysis.
 
-        Returns transformed data if a linearisation has been applied, otherwise
-        the original raw InputData.  Used by the 'Fit other Models' workflow
-        (Section 3.2.1, Branch 4) to determine the starting dataset for re-analysis.
+        Returns transformed data if a linearisation has been applied, otherwise the original raw InputData. Used by the
+        'Fit other Models' workflow (Section 3.2.1, Branch 4) to determine the starting dataset for re-analysis.
         """
         return self.transformed_data if self.transformed_data is not None else self.raw_data
 
@@ -1388,10 +1345,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Discard transformed data and restore the raw InputData in ScreenManager.
 
-        Supports the 'Fit other Models' sub-component in Section 3.2.1 (Branch 4)
-        by resetting the transformation state so the user can re-run linearisation
-        with a different equation without re-importing their data.  Notifies the
-        user with an informational dialog on success.
+        Supports the 'Fit other Models' sub-component in Section 3.2.1 (Branch 4) by resetting the transformation state
+        so the user can re-run linearisation with a different equation without re-importing their data. Notifies the user
+        with an informational dialog on success.
         """
         if self.data_transformer is not None:
             self.transformed_data = None
@@ -1411,11 +1367,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Attempt to linearise equation with the given x/y variable assignment.
 
-        Substitutes the user-selected variables into generic SymPy symbols x and y,
-        calls the static linearise() method (Algorithm 2), then reverses the
-        substitution to restore original symbol names in the displayed result.
-        Called twice by _linearise_equation with swapped variable orderings so
-        score_result() can compare both candidates.
+        Substitutes the user-selected variables into generic SymPy symbols x and y, calls the static linearise() method
+        (Algorithm 2), then reverses the substitution to restore original symbol names in the displayed result.
+        Called twice by _linearise_equation with swapped variable orderings so score_result() can compare both candidates.
 
         Args:
             equation: SymPy Eq parsed from the selected equation expression.
@@ -1460,9 +1414,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Inspect a linearised SymPy equation to determine axis transformation labels.
 
-        Analyses the LHS for y-axis transforms (log, power) and the RHS for x-axis
-        transforms (log, reciprocal, power), returning strings such as "ln(I)" or
-        "1/λ" that are used as axis labels in the graph output (x_label / y_label in
+        Analyses the LHS for y-axis transforms (log, power) and the RHS for x-axis transforms (log, reciprocal, power),
+        returning strings such as "ln(I)" or "1/λ" that are used as axis labels in the graph output (x_label / y_label in
         the Key Variables table, Section 3.2.2) and passed to DataTransformer.
 
         Args:
@@ -1530,15 +1483,13 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Extract the physical meanings of the gradient and intercept from a linearised equation.
 
-        Parses the RHS of the SymPy Eq to identify the coefficient of x (gradient) and
-        the constant term (intercept), converting them back to original symbols for
-        readability.  Handles reciprocal equations (V = hc/(eλ) → gradient = hc/e) by
-        multiplying the RHS by x and simplifying.  Falls back to transform_info metadata
-        for exponential equations where SymPy's polynomial extraction may not apply.
+        Parses the RHS of the SymPy Eq to identify the coefficient of x (gradient) and the constant term (intercept),
+        converting them back to original symbols for readability. Handles reciprocal equations (V = hc/(eλ) → gradient = hc/e)
+        by multiplying the RHS by x and simplifying. Falls back to transform_info metadata for exponential equations where
+        SymPy's polynomial extraction may not apply.
 
-        The returned strings populate the 'Gradient represents' and 'Y-intercept
-        represents' fields in the plotting instructions panel (Section 3.2.2, User
-        Interface — Screen 2) and are stored in ScientificEquation.m_meaning /
+        The returned strings populate the 'Gradient represents' and 'Y-intercept represents' fields in the plotting
+        instructions panel (Section 3.2.2, User Interface — Screen 2) and are stored in ScientificEquation.m_meaning /
         c_meaning for forwarding to Screen 4.
 
         Args:
@@ -1662,11 +1613,9 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Reveal the linearised result panel and populate it with equation and instructions.
 
-        Called by _linearise_equation after a successful linearisation.  Displays the
-        pretty-printed SymPy equation string and a multi-line 'Plotting Instructions'
-        block listing the axis assignments and physical meanings of the gradient and
-        intercept, as required by Section 3.2.2 (User Interface — Screen 2, Linearised
-        Form panel).
+        Called by _linearise_equation after a successful linearisation. Displays the pretty-printed SymPy equation string
+        and a multi-line 'Plotting Instructions' block listing the axis assignments and physical meanings of the gradient
+        and intercept, as required by Section 3.2.2 (User Interface — Screen 2, Linearised Form panel).
 
         Args:
             linearised_eq: SymPy Eq to display (pretty-printed via sp.pretty).
@@ -1710,9 +1659,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Transform a SymPy equation into y = mx + c (or ln(y) = mx + c) linear form.
 
-        Implements Algorithm 2 from Section 3.2.2.  The method operates in the generic
-        x/y symbol space so it can be reused for any variable assignment without
-        needing to know the original physical symbol names.
+        Implements Algorithm 2 from Section 3.2.2. The method operates in the generic x/y symbol space so it can be reused
+        for any variable assignment without needing to know the original physical symbol names.
 
         Handles four equation structures:
           1. Already linear (degree ≤ 1 in x) — returns as-is or solves for y.
@@ -1797,9 +1745,8 @@ class AnalysisMethodScreen(tk.Frame):
         """
         Restore the placeholder text when the search entry loses focus while empty.
 
-        Paired with _clear_placeholder to maintain the greyed-out hint text that
-        guides users before they type a query, satisfying the usability requirement
-        in Section 3.1.4 (the interface must clearly indicate interactive elements).
+        Paired with _clear_placeholder to maintain the greyed-out hint text that guides users before they type a query,
+        satisfying the usability requirement in Section 3.1.4 (the interface must clearly indicate interactive elements).
         """
         if not self.search_entry.get().strip():
             self.search_entry.insert(0, self.search_placeholder)
@@ -1810,10 +1757,9 @@ if __name__ == "__main__":
     """
     Standalone launch for isolated development and manual testing of Screen 2.
 
-    Mirrors the __main__ pattern in LinMain.py (Section 3.3, Stage 2 — Main Code
-    Launch) so this screen can be inspected independently without running the full
-    application.  Requires data to be seeded into ScreenManager for full
-    functionality; useful for layout verification without data-dependent behaviour.
+    Mirrors the __main__ pattern in LinMain.py (Section 3.3, Stage 2 — Main Code Launch) so this screen can be inspected 
+    independently without running the full application. Requires data to be seeded into ScreenManager for full functionality; 
+    useful for layout verification without data-dependent behaviour.
     """
     root = tk.Tk()
     root.geometry("1000x600")

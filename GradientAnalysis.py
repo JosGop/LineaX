@@ -22,10 +22,12 @@ from matplotlib.backends.backend_pdf import PdfPages
 from NumberFormatting import format_number, format_number_with_uncertainty
 from ManagingScreens import make_scrollable
 
+"""
+Unit-to-SI conversion factors (multiply measurement by factor to get SI value).
 
-# Unit-to-SI conversion factors (multiply measurement by factor to get SI value)
-# Used by _solve_for_unknown() when the user has entered non-SI units in Screen 2
-# (matches the unit conversion guidance in Section 3.2.2 Measurement Units input)
+Used by _solve_for_unknown() when the user has entered non-SI units in Screen 2 (matches the unit conversion guidance in 
+Section 3.2.2 Measurement Units input)
+"""
 _UNIT_CONVERSIONS: Dict[str, float] = {
     'nm': 1e-9, 'nanometer': 1e-9, 'nanometers': 1e-9,
     'um': 1e-6, 'micrometer': 1e-6, 'micrometers': 1e-6,
@@ -53,10 +55,9 @@ class GradientAnalysisScreen(tk.Frame):
     """
     Screen 4 from Section 3.2.2 — Gradient Analysis & Results.
 
-    Reads analysis_data from ScreenManager (populated by LinearGraphResultsScreen
-    via set_analysis_results()). If a 'find_variable' was specified in Screen 2,
-    _solve_for_unknown() uses SymPy to rearrange the gradient expression and solve
-    for that variable, applying unit conversion and uncertainty propagation.
+    Reads analysis_data from ScreenManager (populated by LinearGraphResultsScreen via set_analysis_results()). If a
+    'find_variable' was specified in Screen 2, _solve_for_unknown() uses SymPy to rearrange the gradient expression and
+    solve for that variable, applying unit conversion and uncertainty propagation.
 
     The screen is divided into four sections matching the Section 3.2.2 Screen 4 design:
       Section 1 — Selected Equation display
@@ -84,9 +85,8 @@ class GradientAnalysisScreen(tk.Frame):
         """
         Load gradient and intercept data from the screen manager.
 
-        Reads the analysis_data dict set by LinearGraphResultsScreen.analyze_gradient()
-        via ScreenManager.set_analysis_results(). Triggers _solve_for_unknown() if
-        a find_variable was specified during Screen 2 equation setup.
+        Reads the analysis_data dict set by LinearGraphResultsScreen.analyze_gradient() via ScreenManager.set_analysis_results().
+        Triggers _solve_for_unknown() if a find_variable was specified during Screen 2 equation setup.
         """
         if not hasattr(self.manager, 'get_analysis_results'):
             messagebox.showwarning("No Analysis Data",
@@ -115,7 +115,7 @@ class GradientAnalysisScreen(tk.Frame):
         self.intercept_meaning = data.get('intercept_meaning', self.intercept_variable)
 
         # Retrieve the original equation expression (e.g. "p = m*v") stored in
-        # equation_info by AnalysisMethod.generate_graph().  This is kept separate
+        # equation_info by AnalysisMethod.generate_graph(). This is kept separate
         # from analysis_results because it is set before regression is run.
         eq_info = self.manager.get_equation_info() if hasattr(self.manager, 'get_equation_info') else {}
         self.equation_expression = (eq_info or {}).get('equation_expression', '')
@@ -138,15 +138,13 @@ class GradientAnalysisScreen(tk.Frame):
         """
         Solve the gradient expression for the unknown variable with unit conversion.
 
-        Uses SymPy to parse the gradient_meaning expression (e.g. '-lambda' from a
-        radioactive decay equation), substitute the measured gradient value and any
-        known constants from Screen 2, then solve for find_variable. Uncertainty is
-        propagated by differentiating the solution expression with respect to the
-        gradient symbol (standard linear error propagation).
+        Uses SymPy to parse the gradient_meaning expression (e.g. '-lambda' from a radioactive decay equation), substitute
+        the measured gradient value and any known constants from Screen 2, then solve for find_variable. Uncertainty is
+        propagated by differentiating the solution expression with respect to the gradient symbol (standard linear error
+        propagation).
 
-        Unit conversion is applied before solving: the gradient is multiplied by
-        the product of all SI conversion factors from measurement_units, as set
-        in Screen 2's Measurement Units input (Section 3.2.2).
+        Unit conversion is applied before solving: the gradient is multiplied by the product of all SI conversion factors
+        from measurement_units, as set in Screen 2's Measurement Units input (Section 3.2.2).
         """
         import sympy as sp
         from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
@@ -256,9 +254,8 @@ class GradientAnalysisScreen(tk.Frame):
         """
         Display the calculated gradient with uncertainty and worst-fit range.
 
-        Shows the 'From Best Fit' result using format_number_with_uncertainty()
-        (NumberFormatting.py), and the max/min worst-fit values calculated from
-        gradient +/- gradient_uncertainty (Algorithm 5 output from Screen 3a).
+        Shows the 'From Best Fit' result using format_number_with_uncertainty() (NumberFormatting.py), and the max/min
+        worst-fit values calculated from gradient +/- gradient_uncertainty (Algorithm 5 output from Screen 3a).
         This is Screen 4 Section 2 from Section 3.2.2.
         """
         section = tk.LabelFrame(parent, text="Calculated Unknown Value", font=("Segoe UI", 10, "bold"),
@@ -305,8 +302,7 @@ class GradientAnalysisScreen(tk.Frame):
         Display the y-intercept value if available (Screen 4 additional result).
 
         The intercept and its uncertainty are formatted using format_number_with_uncertainty().
-        This section is omitted entirely if intercept is None (e.g. for equations
-        whose only unknown is the gradient variable).
+        This section is omitted entirely if intercept is None (e.g. for equations whose only unknown is the gradient variable).
         """
         if self.intercept is None:
             return
@@ -332,9 +328,8 @@ class GradientAnalysisScreen(tk.Frame):
 
         Implements the percentage difference calculation from Section 3.2.2:
         percentage_diff = |(measured - known)| / known * 100%.
-        The user types a known/accepted value (supporting multiple scientific notation
-        formats via _parse_scientific_notation) and presses Enter or the button
-        to trigger calculate_comparison().
+        The user types a known/accepted value (supporting multiple scientific notation formats via _parse_scientific_notation)
+        and presses Enter or the button to trigger calculate_comparison().
         """
         section = tk.LabelFrame(parent, text="Compare with Known Value (Optional)",
                                 font=("Segoe UI", 10, "bold"), bg="white", fg="#9333ea")
@@ -398,10 +393,9 @@ class GradientAnalysisScreen(tk.Frame):
         """
         Calculate and display the percentage difference against a known value.
 
-        Implements Screen 4 Section 3 from Section 3.2.2. Parses the input via
-        _parse_scientific_notation(), computes |measured - known| / known * 100%,
-        and provides an interpretation (Excellent/Good/Check method) based on
-        threshold values commonly used in A-Level practical marking.
+        Implements Screen 4 Section 3 from Section 3.2.2. Parses the input via _parse_scientific_notation(), computes
+        |measured - known| / known * 100%, and provides an interpretation (Excellent/Good/Check method) based on threshold
+        values commonly used in A-Level practical marking.
         """
         known_str = self.known_value_entry.get().strip()
         if not known_str or known_str.startswith("e.g."):
@@ -434,10 +428,10 @@ class GradientAnalysisScreen(tk.Frame):
         """
         Parse various formats of scientific notation into a float.
 
-        Handles: standard decimal, e-notation, multiply-by-10-to-power (5.01*10^-3),
-        Unicode times and minus signs, and Unicode superscripts (5.01x10^-2).
-        This robust parser is needed because OCR Physics A accepted values are
-        often written in non-standard notation on data sheets.
+        Handles: standard decimal, e-notation, multiply-by-10-to-power (5.01*10^-3), Unicode times and minus signs, and
+        Unicode superscripts (5.01x10^-2).
+        This robust parser is needed because OCR Physics A accepted values are often written in non-standard notation on
+        data sheets.
         """
         text = text.strip().replace(' ', '').lstrip('+')
         text = text.replace('*', '*').replace('-', '-').translate(_FROM_SUPERSCRIPT)
@@ -460,8 +454,8 @@ class GradientAnalysisScreen(tk.Frame):
           Page 1 — The linearised graph figure retrieved from ScreenManager
           Page 2 — Gradient and intercept results table formatted with format_number_with_uncertainty
           Page 3 — Raw data and transformed data tables (one page per dataset)
-        All number formatting uses NumberFormatting.py functions for consistency
-        with the on-screen display (Section 3.2.2 Screen 4 Export function).
+        All number formatting uses NumberFormatting.py functions for consistency with the on-screen display (Section 3.2.2
+        Screen 4 Export function).
         """
         filepath = filedialog.asksaveasfilename(
             title="Export Analysis Report", defaultextension=".pdf",
@@ -564,10 +558,9 @@ class GradientAnalysisScreen(tk.Frame):
         """
         Save the analysis results to a .lineax JSON file.
 
-        Writes equation name, gradient, intercept (each with value, uncertainty,
-        units, variable name) to a human-readable JSON file. The .lineax extension
-        is custom to LineaX to make projects easily identifiable. This implements
-        the 'Save Project' action from Screen 4 Section 4 (Section 3.2.2).
+        Writes equation name, gradient, intercept (each with value, uncertainty, units, variable name) to a human-readable JSON
+        file. The .lineax extension is custom to LineaX to make projects easily identifiable. This implements the 'Save Project'
+        action from Screen 4 Section 4 (Section 3.2.2).
         """
         filepath = filedialog.asksaveasfilename(
             title="Save LineaX Project", defaultextension=".lineax",

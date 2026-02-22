@@ -1,15 +1,14 @@
 """
 GraphSettings.py
 
-Provides an Excel-style Chart Elements popup for toggling and customising graph visual
-components. Implements the 'Options to toggle/change aspects' sub-component from
-Section 3.2.1 (Branch 4 — Graphs). Corresponds to the 'Settings Button' described in
-Section 3.2.2 (User Interface, Screen 3a and Screen 3b).
+Provides an Excel-style Chart Elements popup for toggling and customising graph visual components. Implements the 'Options
+to toggle/change aspects' sub-component fromSection 3.2.1 (Branch 4 — Graphs). Corresponds to the 'Settings Button' described
+in Section 3.2.2 (User Interface, Screen 3a and Screen 3b).
 
-Extended features:
+Sepcific Requests from Stakeholder M:
   - Major/minor gridlines as independent toggles (finer control over axis readability)
   - Inline rename fields for Chart Title and Axis Titles (X and Y separately)
-  - Data labels rendered as coordinate pairs (x, y) to at most 3 decimal places
+  - Data labels rendered as coordinate pairs (x, y) to at most 5 decimal places
 """
 
 import tkinter as tk
@@ -343,8 +342,8 @@ class ChartElementsPopup(tk.Toplevel):
     # Button actions
     def reset_to_default(self):
         """
-        Reset all toggles to defaults, clear rename fields, re-sync Entry states,
-        and fire the callback to redraw the graph immediately.
+        Reset all toggles to defaults, clear rename fields, re-sync Entry states, and fire the callback to redraw the
+        graph immediately.
         """
         for key, value in _DEFAULT_ELEMENT_STATES.items():
             self.element_states[key].set(value)
@@ -370,8 +369,8 @@ class ChartCustomisationMixin:
     """
     Mixin that adds Chart Elements popup management to a graph results screen.
 
-    Stores both toggle states (chart_element_states) and text overrides
-    (chart_label_texts) so any create_graph() implementation can consult both.
+    Stores both toggle states (chart_element_states) and text overrides (chart_label_texts) so any create_graph()
+    implementation can consult both.
     """
 
     def init_chart_customisation(self):
@@ -430,8 +429,7 @@ class ChartCustomisationMixin:
         """
         Apply all chart customisation to an existing Matplotlib Axes object.
 
-        Called at the end of create_graph() in both display screens after all data
-        series and fit curves have been added.
+        Called at the end of create_graph() in both display screens after all data series and fit curves have been added.
 
         Handles:
           - Data labels as '(x, y)' coordinate pairs, trailing zeros stripped, max 5 dp

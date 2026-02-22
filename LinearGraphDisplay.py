@@ -1,11 +1,9 @@
 """
 LinearGraphDisplay.py — Screen 3a (Linear Graph Results Screen) from Section 3.2.2.
 
-Displays the linearised graph with best-fit and worst-fit lines alongside
-three statistical results panels. Implements Algorithm 5 (worst-fit line
-calculation) and passes regression results to GradientAnalysisScreen (Screen 4).
-Also provides the Excel-style Chart Elements popup from GraphSettings.py
-(Section 3.2.1 Branch 4 Options panel).
+Displays the linearised graph with best-fit and worst-fit lines alongside three statistical results panels. Implements
+Algorithm 5 (worst-fit line calculation) and passes regression results to GradientAnalysisScreen (Screen 4).
+Also provides the Excel-style Chart Elements popup from GraphSettings.py (Section 3.2.1 Branch 4 Options panel).
 """
 
 import tkinter as tk
@@ -28,16 +26,13 @@ class LinearGraphResultsScreen(tk.Frame):
     """
     Screen 3a from Section 3.2.2 — Linear Regression Results.
 
-    On initialisation, loads the transformed InputData from ScreenManager,
-    runs weighted or unweighted least-squares regression (_perform_linear_regression),
-    and estimates worst-fit gradient bounds (_calculate_worst_fit_lines — Algorithm 5).
-    The screen then renders the matplotlib graph embedded in tkinter and three
-    statistical panels (best fit, worst fit max, worst fit min).
+    On initialisation, loads the transformed InputData from ScreenManager, runs weighted or unweighted least-squares
+    regression (_perform_linear_regression), and estimates worst-fit gradient bounds (_calculate_worst_fit_lines — Algorithm 5).
+    The screen then renders the matplotlib graph embedded in tkinter and three statistical panels (best fit, worst fit max,
+     worst fit min).
 
-    Clicking 'Analyse Gradient ->' packages the regression results into a dict,
-    stores it via ScreenManager.set_analysis_results(), and shows Screen 4
-    (GradientAnalysisScreen). This implements the Screen 3a -> 4 transition in
-    the Data Flow diagram (Section 3.2.1).
+    Clicking 'Analyse Gradient ->' packages the regression results into a dict, stores it via ScreenManager.set_analysis_results(),
+    and shows Screen 4 (GradientAnalysisScreen). This implements the Screen 3a -> 4 transition in the Data Flow diagram (Section 3.2.1).
     """
 
     def __init__(self, parent, manager):
@@ -94,11 +89,10 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Fit a weighted or unweighted least-squares line and extract statistics.
 
-        Uses numpy.polyfit with degree 1. If y_error values are present and non-zero,
-        applies inverse-variance weighting (w = 1/sigma^2) for a weighted least-squares
-        fit as described in Section 3.2.2. The covariance matrix diagonal gives the
-        squared uncertainty on gradient and intercept. R^2 is computed from residuals
-        as referenced in the Key Variables table (Section 3.2.2).
+        Uses numpy.polyfit with degree 1. If y_error values are present and non-zero, applies inverse-variance weighting
+        (w = 1/σ²) for a weighted least-squares fit as described in Section 3.2.2. The covariance matrix diagonal gives
+        the squared uncertainty on gradient and intercept. R² is computed from residuals as referenced in the Key Variables
+        table (Section 3.2.2).
         """
         x, y = self.input_data.x_values, self.input_data.y_values
         y_err = self.input_data.y_error
@@ -124,11 +118,9 @@ class LinearGraphResultsScreen(tk.Frame):
         Estimate worst-case gradients using the first and last error bar extremes.
 
         This is Algorithm 5 from Section 3.2.2 (Worst-Fit Line Calculation).
-        The steepest possible line (max gradient) passes through the upper error
-        bar of the last point and the lower error bar of the first point.
-        The shallowest line (min gradient) does the opposite. The percentage
-        difference from the best-fit gradient is also stored for display on Screen 3a
-        and export to Screen 4.
+        The steepest possible line (max gradient) passes through the upper error bar of the last point and the lower error
+        bar of the first point. The shallowest line (min gradient) does the opposite. The percentage difference from the
+        best-fit gradient is also stored for display on Screen 3a and export to Screen 4.
         """
         x, y = self.input_data.x_values, self.input_data.y_values
         y_err = self.input_data.y_error
@@ -196,10 +188,9 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Draw data points, error bars, best-fit line, and worst-fit lines on a matplotlib figure.
 
-        Respects chart_element_states so toggling elements via the Chart Elements popup
-        (Section 3.2.1 Branch 4) immediately removes/restores that element on the next
-        refresh. The figure is stored in ScreenManager via set_graph_figure() so it can
-        be embedded in the PDF export from GradientAnalysisScreen (Screen 4).
+        Respects chart_element_states so toggling elements via the Chart Elements popup (Section 3.2.1 Branch 4) immediately
+        removes/restores that element on the next refresh. The figure is stored in ScreenManager via set_graph_figure()
+        so it can be embedded in the PDF export from GradientAnalysisScreen (Screen 4).
         """
         if self.input_data is None:
             tk.Label(self.graph_frame, text="[Graph Display Area]",
@@ -267,8 +258,8 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Overlay worst-case max and min gradient lines using first/last error bars.
 
-        This is the visual output of Algorithm 5 (Section 3.2.2). The max-gradient
-        line (red dashed) is drawn through (x[0], y[0]+err[0]) and (x[-1], y[-1]-err[-1]).
+        This is the visual output of Algorithm 5 (Section 3.2.2). The max-gradient line (red dashed) is drawn through
+        (x[0], y[0]+err[0]) and (x[-1], y[-1]-err[-1]).
         The min-gradient line (orange dashed) is the mirror image.
         """
         x_pts = [x[0], x[-1]]
@@ -297,10 +288,10 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Create best-fit, worst-fit max, and worst-fit min panels.
 
-        The Best Fit panel displays gradient and intercept values formatted by
-        format_number_with_uncertainty() (NumberFormatting.py) and R^2 from regression.
-        The Worst Fit panels show Algorithm 5 gradients and their percentage difference
-        from the best fit — all values referenced in the Key Variables table (Section 3.2.2).
+        The Best Fit panel displays gradient and intercept values formatted by format_number_with_uncertainty()
+        (NumberFormatting.py) and R² from regression.
+        The Worst Fit panels show Algorithm 5 gradients and their percentage difference from the best fit — all values
+        referenced in the Key Variables table (Section 3.2.2).
         """
         best = self._make_panel(parent, "Best Fit Line", "#059669", 0)
         self._stat_row(best, "Gradient:", format_number_with_uncertainty(self.best_fit_gradient, self.gradient_uncertainty))
@@ -329,9 +320,8 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Open or bring to front the Chart Elements popup.
 
-        Passes initial_labels so rename entries are pre-populated with current
-        label overrides (or the input data titles on first open). The WM_DELETE_WINDOW
-        handler destroys the window AND clears the reference so re-opening works.
+        Passes initial_labels so rename entries are pre-populated with current label overrides (or the input data titles
+        on first open). The WM_DELETE_WINDOW handler destroys the window AND clears the reference so re-opening works.
         """
         if self.chart_elements_popup is not None:
             self.chart_elements_popup.lift()
@@ -393,9 +383,8 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Package regression results and navigate to the gradient analysis screen.
 
-        Builds the analysis_data dict that GradientAnalysisScreen (Screen 4) reads
-        via ScreenManager.get_analysis_results(). Includes best-fit gradient and
-        intercept with their uncertainties (Algorithm 5), plus equation metadata.
+        Builds the analysis_data dict that GradientAnalysisScreen (Screen 4) reads via ScreenManager.get_analysis_results().
+        Includes best-fit gradient and intercept with their uncertainties (Algorithm 5), plus equation metadata.
         This implements the Screen 3a -> 4 transition in Section 3.2.1 Data Flow.
         """
         eq = (self.manager.get_equation_info() if hasattr(self.manager, 'get_equation_info') else {}) or {}

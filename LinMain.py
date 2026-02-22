@@ -2,12 +2,11 @@
 LinMain.py
 
 Application entry point for LineaX.
-Implements the launch logic described in Section 3.3 Development (Stage 2 — Data Input
-Screen, "Main Code Launch for the Data Input Screen"). Initialises the root Tkinter
-window, centres it on the user's display, and opens the first screen (DataInputScreen)
-via ScreenManager.show(). The conditional __main__ guard (also described in Section 3.3)
-allows DataInputScreen and other modules to be imported independently during unit testing
-(Section 3.2.3, Stage 1) without executing the full application.
+Implements the launch logic described in Section 3.3 Development (Stage 2 — Data Input Screen, "Main Code Launch for the
+Data Input Screen"). Initialises the root Tkinter window, centres it on the user's display, and opens the first screen
+(DataInputScreen) via ScreenManager.show(). The conditional __main__ guard (also described in Section 3.3) allows
+DataInputScreen and other modules to be imported independently during unit testing (Section 3.2.3, Stage 1) without
+executing the full application.
 """
 
 import tkinter as tk
@@ -19,12 +18,10 @@ def main():
     """
     Launch the LineaX application.
 
-    Creates the root window, sets a fixed 1100×700 resolution as described in
-    Section 3.3 (Stage 2: "presented at a fixed resolution to ensure consistent
-    layout behaviour during early development"), centres the window on screen for
-    usability (Section 3.1.4, Usability Features), and delegates screen management
-    to ScreenManager. The fixed geometry ensures the UI mockups from Section 3.2.2
-    render as designed across different monitor sizes.
+    Creates the root window, sets a fixed 1100×700 resolution as described in Section 3.3 (Stage 2: "presented at a fixed
+    resolution to ensure consistent layout behaviour during early development"), centres the window on screen for usability
+    (Section 3.1.4, Usability Features), and delegates screen management to ScreenManager.
+    The fixed geometry ensures the UI mockups from Section 3.2.2 render as designed across different monitor sizes.
     """
     root = tk.Tk()
     root.title("LineaX – Linear Analysis Tool")
@@ -47,10 +44,8 @@ if __name__ == "__main__":
     """
     Conditional entry point guard.
 
-    Described in Section 3.3 (Stage 2 — Main Code Launch): "Encapsulating the launch
-    logic in this conditional block allows the screen to be imported into other modules
-    later without executing the application automatically, supporting modular development
-    and testing." Enables white-box unit tests (Section 3.2.3, Stage 1) to import
-    individual screen classes without triggering the Tkinter event loop.
+    Encapsulating the launch logic in this conditional block allows the screen to be imported into other modules later 
+    without executing the application automatically, supporting modular development and testing.Enables white-box unit tests 
+    (Section 3.2.3, Stage 1) to import individual screen classes without triggering the Tkinter event loop.
     """
     main()

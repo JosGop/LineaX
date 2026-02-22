@@ -2,12 +2,10 @@
 DataTransform.py
 
 Handles transformation of raw experimental data for linearisation.
-Implements Algorithm 2 from Section 3.2.2 (Linearise to the form y = mx + c)
-and the 'Assign apt. x and y values with respect to equation' sub-component from
-Section 3.2.1 (Branch 3 — Linear). Transforms both numerical values and axis titles
-based on the equation type, with correct error propagation throughout. The supported
-transforms (ln, exp, power, reciprocal, sqrt) correspond directly to the examples
-given in Section 3.2.1: exponential → Y = ln(I), power law → Y = log(y), X = log(x).
+Implements Algorithm 2 from Section 3.2.2 (Linearise to the form y = mx + c) and the 'Assign apt. x and y values with respect
+to equation' sub-component from Section 3.2.1 (Branch 3 — Linear). Transforms both numerical values and axis titles based
+on the equation type, with correct error propagation throughout. The supported transforms (ln, exp, power, reciprocal, sqrt)
+correspond directly to the examples given in Section 3.2.1: exponential → Y = ln(I), power law → Y = log(y), X = log(x).
 """
 
 import numpy as np
@@ -20,12 +18,10 @@ class DataTransformer:
     """
     Transforms experimental data based on linearisation requirements.
 
-    Implements the data transformation step described in the 'Manipulate user values
-    if required' sub-component of Section 3.2.1 (Branch 3 — Linear) and Algorithm 2
-    from Section 3.2.2. Stores transformation metadata in transformation_applied so
-    that axis labels can be updated automatically (e.g., "Force" → "ln(Force)"),
-    as required by Section 3.2.2 (User Interface) and the x_label / y_label variables
-    in the Key Variables table (Section 3.2.2).
+    Implements the data transformation step described in the 'Manipulate user values if required' sub-component of Section
+    3.2.1 (Branch 3 — Linear) and Algorithm 2 from Section 3.2.2. Stores transformation metadata in transformation_applied
+    so that axis labels can be updated automatically (e.g., "Force" → "ln(Force)"), as required by Section 3.2.2 (User Interface)
+    and the x_label / y_label variables in the Key Variables table (Section 3.2.2).
 
     Supported transforms: ln(x), exp(x), x^n, 1/x, sqrt(x), applied to
     either axis independently, with correct error propagation throughout.
@@ -46,12 +42,11 @@ class DataTransformer:
         """
         Apply axis transformations to produce a linearised dataset.
 
-        Core method of Algorithm 2 (Section 3.2.2). Takes transformation strings derived
-        from the selected scientific equation (e.g., "ln(y)" for exponential decay) and
-        delegates to _transform_axis() for each axis. The returned InputData has updated
-        axis titles (e.g., "ln(Intensity)") satisfying the label update requirement in
-        Section 3.2.1 (Sub-sub-component: Assign apt. x and y values) and stores a
-        transformation_applied dict for downstream use in GradientAnalysis.py.
+        Core method of Algorithm 2 (Section 3.2.2). Takes transformation strings derived from the selected scientific
+        equation (e.g., "ln(y)" for exponential decay) and delegates to _transform_axis() for each axis. The returned
+        InputData has updated axis titles (e.g., "ln(Intensity)") satisfying the label update requirement in Section 3.2.1
+        (Sub-sub-component: Assign apt. x and y values) and stores a transformation_applied dict for downstream use in
+        GradientAnalysis.py.
 
         Args:
             x_transform: Transformation string for x-axis (e.g. "x**2", "1/x", "ln(x)").
@@ -94,12 +89,11 @@ class DataTransformer:
         """
         Transform a single axis according to the transform string.
 
-        Routes to the appropriate private helper based on the transform string pattern,
-        implementing the conditional logic of Algorithm 2 (Section 3.2.2). Also updates
-        the axis title with the correct mathematical notation (e.g., "ln(Force)") to
-        satisfy the axis label requirement from Section 3.2.1 (Assign apt. x and y values).
-        Error propagation rules follow standard physics uncertainty analysis, as expected
-        by the OCR A-Level specification cited in Section 3.2.2.
+        Routes to the appropriate private helper based on the transform string pattern, implementing the conditional logic
+        of Algorithm 2 (Section 3.2.2). Also updates the axis title with the correct mathematical notation (e.g., "ln(Force)")
+        to satisfy the axis label requirement from Section 3.2.1 (Assign apt. x and y values).
+        Error propagation rules follow standard physics uncertainty analysis, as expected by the OCR Physics A-Level
+        specification cited in Section 3.2.2.
 
         Returns:
             Tuple of (transformed_values, transformed_errors, new_title).
@@ -128,10 +122,9 @@ class DataTransformer:
         """
         Apply ln; propagates error as Δln(x) = Δx/x.
 
-        Used for exponential linearisation (e.g., A = A0·exp(-λt) → ln(A) = -λt + ln(A0))
-        as described in Section 3.2.1 (Sub-sub-component: Linearise to y = mx + c) and
-        Algorithm 2 from Section 3.2.2. Raises ValueError for non-positive values, implementing
-        the 'Manipulate user values if required' guard described in Section 3.2.1.
+        Used for exponential linearisation (e.g., A = A0·exp(-λt) → ln(A) = -λt + ln(A0)) as described in Section 3.2.1
+        (Sub-sub-component: Linearise to y = mx + c) and Algorithm 2 from Section 3.2.2. Raises ValueError for non-positive
+        values, implementing the 'Manipulate user values if required' guard described in Section 3.2.1.
         """
         if np.any(values <= 0):
             raise ValueError("Cannot take logarithm of non-positive values")
@@ -142,9 +135,8 @@ class DataTransformer:
         """
         Apply exp; propagates error as Δexp(x) = exp(x)·Δx.
 
-        Standard chain-rule uncertainty propagation for exponential transform, used when
-        the inverse of a log linearisation is needed. Error propagation follows OCR Physics
-        A uncertainty analysis conventions referenced in Section 3.2.2.
+        Standard chain-rule uncertainty propagation for exponential transform, used when the inverse of a log linearisation
+        is needed. Error propagation follows OCR Physics A uncertainty analysis conventions referenced in Section 3.2.2.
         """
         new_vals = np.exp(values)
         return new_vals, (new_vals * errors if errors is not None else None)  # Δexp(x) = exp(x)·Δx
@@ -153,10 +145,9 @@ class DataTransformer:
         """
         Apply x^n; propagates error as Δ(x^n) = n·x^(n-1)·Δx.
 
-        Supports power-law linearisation (e.g., y = A·x^b → y^(1/b) = A^(1/b)·x) from
-        Section 3.2.1. The absolute value in the error term ensures non-negative uncertainties
-        when n < 1, consistent with the validation requirement for positive uncertainties in
-        the Key Variables table (Section 3.2.2).
+        Supports power-law linearisation (e.g., y = A·x^b → y^(1/b) = A^(1/b)·x) from Section 3.2.1. The absolute value
+        in the error term ensures non-negative uncertainties when n < 1, consistent with the validation requirement for
+        positive uncertainties in the Key Variables table (Section 3.2.2).
         """
         new_vals = np.power(values, power)
         new_errs = np.abs(power * np.power(values, power - 1) * errors) if errors is not None else None
@@ -166,10 +157,9 @@ class DataTransformer:
         """
         Apply 1/x; propagates error as Δ(1/x) = Δx/x².
 
-        Supports the reciprocal linearisation type (e.g., density ρ = m/V → 1/V = ρ/m),
-        identified in Equations.py for equations tagged linearisation_type="reciprocal".
-        Guards against division by zero before transformation, consistent with Algorithm 2
-        input validation described in Section 3.2.1 (Manipulate user values if required).
+        Supports the reciprocal linearisation type (e.g., density ρ = m/V → 1/V = ρ/m), identified in Equations.py for
+        equations tagged linearisation_type="reciprocal". Guards against division by zero before transformation, consistent
+        with Algorithm 2 input validation described in Section 3.2.1 (Manipulate user values if required).
         """
         if np.any(values == 0):
             raise ValueError("Cannot take reciprocal of zero")
@@ -180,10 +170,9 @@ class DataTransformer:
         """
         Apply √x; propagates error as Δ√x = Δx / (2√x).
 
-        Supports square-root linearisations for equations such as SUVAT where s ∝ t².
-        Raises ValueError for negative values to prevent NaN propagation, satisfying the
-        finite-value check required before regression in Section 3.2.1 (Ensure consistency
-        with results sub-component).
+        Supports square-root linearisations for equations such as SUVAT where s ∝ t². Raises ValueError for negative values
+        to prevent NaN propagation, satisfying the finite-value check required before regression in Section 3.2.1 (Ensure
+        consistency with results sub-component).
         """
         if np.any(values < 0):
             raise ValueError("Cannot take square root of negative values")
@@ -194,10 +183,9 @@ class DataTransformer:
         """
         Extract the exponent value from a power transform string (x**n or x^n).
 
-        Parses the transform string produced by identify_required_transformations() to
-        obtain the numeric exponent. Falls back to 1.0 if parsing fails, preventing
-        crashes from malformed transform strings as required by the robustness goals
-        in Section 3.1.4 (Solution Requirements).
+        Parses the transform string produced by identify_required_transformations() to obtain the numeric exponent. Falls
+        back to 1.0 if parsing fails, preventing crashes from malformed transform strings as required by the robustness
+        goals in Section 3.1.4 (Solution Requirements).
         """
         sep = "**" if "**" in transform_str else "^"
         try:
@@ -209,9 +197,8 @@ class DataTransformer:
         """
         Return a summary dict of applied transformations.
 
-        Used by graph display modules to populate axis labels and annotation text after
-        linearisation, as required by Section 3.2.2 (annotation_text and x_label/y_label
-        variables in the Key Variables table).
+        Used by graph display modules to populate axis labels and annotation text after linearisation, as required by
+        Section 3.2.2 (annotation_text and x_label/y_label variables in the Key Variables table).
         """
         if self.transformation_applied is None:
             return {"status": "No transformation applied", "x_transform": "x", "y_transform": "y"}
@@ -221,9 +208,8 @@ class DataTransformer:
         """
         Return the original, untransformed InputData.
 
-        Supports the 'Fit other Models' sub-component in Section 3.2.1 (Branch 4 —
-        Graphs Options) where users can re-run analysis with a different model while
-        preserving the original dataset. Also used by ScreenManager.get_raw_data()
+        Supports the 'Fit other Models' sub-component in Section 3.2.1 (Branch 4 — Graphs Options) where users can re-run
+        analysis with a different model while preserving the original dataset. Also used by ScreenManager.get_raw_data()
         to retrieve the pre-transformation data.
         """
         return self.raw_data
@@ -233,12 +219,10 @@ def identify_required_transformations(linearised_eq: sp.Eq, x_var: str, y_var: s
     """
     Identify axis transformations needed from a linearised SymPy equation.
 
-    Companion function to DataTransformer.transform_for_linearisation(). Inspects
-    the structure of a SymPy Eq produced by Algorithm 2 (Section 3.2.2) to determine
-    which transforms were applied to each axis, returning transform strings compatible
-    with _transform_axis(). Supports the 'Ensure consistency with results' sub-component
-    of Section 3.2.1 by enabling cross-validation between the symbolic equation and the
-    numeric transformation.
+    Companion function to DataTransformer.transform_for_linearisation(). Inspects the structure of a SymPy Eq produced by
+    Algorithm 2 (Section 3.2.2) to determine which transforms were applied to each axis, returning transform strings compatible
+    with _transform_axis(). Supports the 'Ensure consistency with results' sub-component of Section 3.2.1 by enabling
+    cross-validation between the symbolic equation and the numeric transformation.
 
     Returns:
         Tuple of (x_transform, y_transform) as strings.
