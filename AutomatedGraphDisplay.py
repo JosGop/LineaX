@@ -19,8 +19,9 @@ import numpy as np
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
 from LineaX_Classes import InputData
-from GraphSettings import ChartElementsPopup
+from GraphSettings import ChartElementsPopup, _DEFAULT_ELEMENT_STATES, _DEFAULT_LABEL_TEXTS, _fmt_coord
 from NumberFormatting import format_number
+from ManagingScreens import make_scrollable
 from typing import Optional, Dict
 
 
@@ -78,20 +79,6 @@ _MODEL_P0 = {
     "Cubic": [1, 1, 1, 1], "Sine": [1, 1, 1, 1],
 }
 
-# Default element visibility for Screen 3b — no 'worst_fit' because automated
-# fits are single curves (no error-bar worst-fit lines as in Algorithm 5)
-_DEFAULT_STATES: Dict[str, bool] = {
-    'axes': True, 'axis_titles': True, 'chart_title': True, 'data_labels': False,
-    'error_bars': True, 'gridlines': True, 'legend': True, 'best_fit': True,
-}
-
-# Elements available in the Screen 3b Chart Elements popup (Section 3.2.1 Branch 4)
-_POPUP_ELEMENTS = [
-    ('axes', 'Axes'), ('axis_titles', 'Axis Titles'), ('chart_title', 'Chart Title'),
-    ('data_labels', 'Data Labels'), ('error_bars', 'Error Bars'), ('gridlines', 'Gridlines'),
-    ('legend', 'Legend'), ('best_fit', 'Best Fit Line'),
-]
-
 # Equation string templates keyed by model name — used by get_equation_text()
 # to display the fitted equation with parameter values substituted in
 _EQ_TEMPLATES = {
@@ -140,7 +127,10 @@ class AutomatedGraphResultsScreen(tk.Frame):
         self.best_model_name = self.best_model_params = self.selected_model = None
         self.figure = self.canvas = None
         self.chart_elements_popup = None
-        self.chart_element_states = dict(_DEFAULT_STATES)
+        # Initialise from canonical defaults (no worst_fit for automated screen)
+        self.chart_element_states = {k: v for k, v in _DEFAULT_ELEMENT_STATES.items()
+                                      if k != 'worst_fit'}
+        self.chart_label_texts    = dict(_DEFAULT_LABEL_TEXTS)
 
         if self._load_data_and_analyze():
             self.create_layout()
@@ -166,9 +156,11 @@ class AutomatedGraphResultsScreen(tk.Frame):
     def create_layout(self):
         """Create the main UI layout for Screen 3b."""
         self.configure(padx=20, pady=20)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        header = tk.Frame(self, bg="white", height=60)
-        header.pack(fill="x", pady=(0, 15))
+        header = tk.Frame(self, bg="white", height=80)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 15))
         header.pack_propagate(False)
 
         tk.Button(header, text="Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
@@ -192,8 +184,7 @@ class AutomatedGraphResultsScreen(tk.Frame):
             tk.Button(button_frame, text=text, font=("Segoe UI", 10), bg="white", fg="#0f172a",
                       relief="solid", bd=1, padx=20, pady=5, cursor="hand2", command=cmd).pack(side="left", padx=5)
 
-        content_frame = tk.Frame(self, bg="white", relief="solid", bd=1)
-        content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        _, content_frame, _, _ = make_scrollable(self, row=1, column=0, bg="white", padx=(10, 10), pady=(10, 10))
 
         self.graph_frame = tk.Frame(content_frame, bg="white")
         self.graph_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -274,10 +265,15 @@ class AutomatedGraphResultsScreen(tk.Frame):
                     fmt='o', color='#3b82f6', ecolor='#94a3b8', capsize=4, markersize=6,
                     label='Data points' if states['legend'] else '', zorder=3)
 
-        if states['data_labels']:
+        if states.get('data_labels'):
             for xi, yi in zip(x, y):
-                ax.annotate(f'{yi:.2f}', (xi, yi), textcoords="offset points",
-                            xytext=(0, 8), ha='center', fontsize=8, color='#333')
+                ax.annotate(
+                    f'({_fmt_coord(xi)}, {_fmt_coord(yi)})',
+                    (xi, yi), textcoords="offset points", xytext=(0, 10),
+                    ha='center', fontsize=7, color='#334155',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
+                              alpha=0.75, edgecolor='none'),
+                )
 
         # Draw the fitted curve for the selected (or best) model (Algorithm 8 output)
         current_model = self.selected_model or self.best_model_name
@@ -288,13 +284,19 @@ class AutomatedGraphResultsScreen(tk.Frame):
                 ax.plot(x_smooth, self.models[current_model](x_smooth, *params), color='#10b981',
                         linewidth=2, label=f'{current_model} fit' if states['legend'] else '', zorder=2)
 
-        if states['chart_title']:
-            ax.set_title("Automated Curve Fitting", fontsize=13, fontweight='bold', pad=15)
-        if states['axis_titles']:
-            ax.set_xlabel(self.input_data.x_title or "X", fontsize=11, fontweight='bold')
-            ax.set_ylabel(self.input_data.y_title or "Y", fontsize=11, fontweight='bold')
-        if states['gridlines']:
-            ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        if states.get('chart_title'):
+            title_text = self.chart_label_texts.get('chart_title') or "Automated Curve Fitting"
+            ax.set_title(title_text, fontsize=13, fontweight='bold', pad=15)
+        if states.get('axis_titles'):
+            x_label = self.chart_label_texts.get('x_title') or self.input_data.x_title or "X"
+            y_label = self.chart_label_texts.get('y_title') or self.input_data.y_title or "Y"
+            ax.set_xlabel(x_label, fontsize=11, fontweight='bold')
+            ax.set_ylabel(y_label, fontsize=11, fontweight='bold')
+        if states.get('major_gridlines'):
+            ax.grid(True, which='major', alpha=0.35, linestyle='--', linewidth=0.6)
+        if states.get('minor_gridlines'):
+            ax.minorticks_on()
+            ax.grid(True, which='minor', alpha=0.18, linestyle=':', linewidth=0.4)
         if states['legend']:
             ax.legend(loc='best', framealpha=0.9, fontsize=9)
         if not states['axes']:
@@ -441,112 +443,40 @@ class AutomatedGraphResultsScreen(tk.Frame):
 
     def open_chart_elements(self):
         """
-        Open or bring to front the custom chart elements popup.
+        Open or bring to front the Chart Elements popup (show_worst_fit=False for Screen 3b).
 
-        Screen 3b uses a bespoke popup (_create_custom_chart_elements_popup) rather
-        than ChartElementsPopup directly because it omits the 'worst_fit' toggle
-        that is only applicable to Screen 3a (Section 3.2.1 Branch 4 Options).
+        Passes initial_labels so rename entries are pre-populated with current overrides.
         """
         if self.chart_elements_popup is not None:
             self.chart_elements_popup.lift()
             return
-        self.chart_elements_popup = self._create_custom_chart_elements_popup()
+        initial_labels = {
+            'chart_title': self.chart_label_texts.get('chart_title', ''),
+            'x_title':     self.chart_label_texts.get('x_title', '') or
+                           (self.input_data.x_title if self.input_data else ''),
+            'y_title':     self.chart_label_texts.get('y_title', '') or
+                           (self.input_data.y_title if self.input_data else ''),
+        }
+        self.chart_elements_popup = ChartElementsPopup(
+            self.parent, self.update_chart_elements,
+            show_worst_fit=False, initial_labels=initial_labels
+        )
         for key, value in self.chart_element_states.items():
             if key in self.chart_elements_popup.element_states:
                 self.chart_elements_popup.element_states[key].set(value)
-        self.chart_elements_popup.protocol("WM_DELETE_WINDOW",
-                                           lambda: setattr(self, 'chart_elements_popup', None))
 
-    def _create_custom_chart_elements_popup(self):
-        """
-        Build a Chart Elements popup without the worst_fit toggle.
+        def _on_close():
+            self.chart_elements_popup.destroy()
+            self.chart_elements_popup = None
 
-        Screen 3b does not display worst-fit lines (Algorithm 5 is only applicable
-        to linear regression on Screen 3a), so the popup elements list _POPUP_ELEMENTS
-        excludes that option. The popup structure mirrors ChartElementsPopup in
-        GraphSettings.py (Section 3.2.1 Branch 4 Options) for UI consistency.
-        """
-        popup = tk.Toplevel(self.parent)
-        popup.title("Chart Elements")
-        popup.geometry("250x350")
-        popup.resizable(False, False)
-        popup.configure(bg="#f0f0f0")
-        popup.transient(self.parent)
-        popup.attributes('-topmost', True)
+        self.chart_elements_popup.protocol("WM_DELETE_WINDOW", _on_close)
 
-        popup.update_idletasks()
-        popup.geometry(f"+{self.parent.winfo_x() + self.parent.winfo_width() - 270}+{self.parent.winfo_y() + 100}")
-
-        popup.element_states = {k: tk.BooleanVar(value=v) for k, v in _DEFAULT_STATES.items()}
-
-        # Header
-        header = tk.Frame(popup, bg="#0078d4", height=35)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        tk.Label(header, text="Chart Elements", font=("Segoe UI", 11, "bold"),
-                 bg="#0078d4", fg="white").pack(side="left", padx=10, pady=8)
-
-        content = tk.Frame(popup, bg="white", padx=5, pady=10)
-        content.pack(fill="both", expand=True)
-
-        for key, label in _POPUP_ELEMENTS:
-            self._create_popup_checkbox(popup, content, key, label)
-
-        tk.Frame(content, bg="#d1d5db", height=1).pack(fill="x", pady=10)
-
-        button_frame = tk.Frame(content, bg="white")
-        button_frame.pack(fill="x", pady=5)
-        tk.Button(button_frame, text="Reset to Default", font=("Segoe UI", 9), bg="#f0f0f0", fg="#333",
-                  relief="solid", bd=1, cursor="hand2",
-                  command=lambda: self._reset_popup_defaults(popup)).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Apply", font=("Segoe UI", 9, "bold"), bg="#0078d4", fg="white",
-                  relief="flat", cursor="hand2", padx=15,
-                  command=lambda: self._apply_popup_changes(popup)).pack(side="right", padx=5)
-
-        return popup
-
-    def _create_popup_checkbox(self, popup, parent, key: str, label: str):
-        """Create a single checkbox item with hover highlight."""
-        item_frame = tk.Frame(parent, bg="white", height=32)
-        item_frame.pack(fill="x", pady=1)
-        item_frame.pack_propagate(False)
-
-        checkbox = tk.Checkbutton(item_frame, text=label, variable=popup.element_states[key],
-                                  font=("Segoe UI", 10), bg="white", activebackground="#e5f3ff",
-                                  selectcolor="white", relief="flat", cursor="hand2",
-                                  command=lambda: self._on_popup_element_toggle(popup))
-        checkbox.pack(side="left", padx=10, pady=5, fill="both", expand=True)
-
-        def on_enter(e):
-            item_frame.config(bg="#e5f3ff")
-            checkbox.config(bg="#e5f3ff")
-
-        def on_leave(e):
-            item_frame.config(bg="white")
-            checkbox.config(bg="white")
-
-        for widget in (item_frame, checkbox):
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-
-    def _on_popup_element_toggle(self, popup):
-        """Apply live element toggle from popup checkbox (Section 3.2.1 Branch 4)."""
-        self.update_chart_elements({key: var.get() for key, var in popup.element_states.items()})
-
-    def _reset_popup_defaults(self, popup):
-        """Reset popup checkboxes to defaults and refresh the chart."""
-        for key, value in _DEFAULT_STATES.items():
-            popup.element_states[key].set(value)
-        self.update_chart_elements(dict(_DEFAULT_STATES))
-
-    def _apply_popup_changes(self, popup):
-        """Apply current popup state and close it."""
-        self.update_chart_elements({key: var.get() for key, var in popup.element_states.items()})
-        popup.destroy()
-
-    def update_chart_elements(self, states: Dict[str, bool]):
-        """Receive updated element states and refresh the graph."""
+    def update_chart_elements(self, states: Dict[str, bool],
+                               label_texts: Optional[Dict[str, str]] = None):
+        """Receive updated toggle states and label text overrides; redraw the graph."""
         self.chart_element_states = states
+        if label_texts is not None:
+            self.chart_label_texts = label_texts
         self.refresh_graph()
 
     def refresh_graph(self):

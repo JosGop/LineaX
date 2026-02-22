@@ -1,377 +1,528 @@
 """
 GraphSettings.py
 
-Provides an Excel-style Chart Elements popup for toggling graph visual components.
-Implements the 'Options to toggle/change aspects' sub-component from Section 3.2.1
-(Branch 4 — Graphs), specifically the Style/Theme, Edit Scale/Range, and Edit Labels
-sub-sub-components. Also corresponds to the 'Settings Button' described in the User
-Interface design for Screen 3a (Linear Graph Output) and Screen 3b (Automated Graph
-Output) in Section 3.2.2. Addresses the usability requirement for dynamic graph
-customisation identified in Section 3.1.4 (Solution Requirements).
+Provides an Excel-style Chart Elements popup for toggling and customising graph visual
+components. Implements the 'Options to toggle/change aspects' sub-component from
+Section 3.2.1 (Branch 4 — Graphs). Corresponds to the 'Settings Button' described in
+Section 3.2.2 (User Interface, Screen 3a and Screen 3b).
+
+Extended features:
+  - Major/minor gridlines as independent toggles (finer control over axis readability)
+  - Inline rename fields for Chart Title and Axis Titles (X and Y separately)
+  - Data labels rendered as coordinate pairs (x, y) to at most 3 decimal places
 """
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable, Dict
+from typing import Callable, Dict, List, Optional
 
-# Default states shared by ChartElementsPopup and ChartCustomizationMixin — mirrors
-# the default graph elements listed in the Screen 3a UI description (Section 3.2.2)
+
+
+# Module-level defaults — imported by LinearGraphDisplay and AutomatedGraphDisplay
+
 _DEFAULT_ELEMENT_STATES: Dict[str, bool] = {
-    'axes': True, 'axis_titles': True, 'chart_title': True,
-    'data_labels': False, 'error_bars': True, 'gridlines': True,
-    'legend': True, 'best_fit': True, 'worst_fit': True,
+    'axes':             True,
+    'axis_titles':      True,
+    'chart_title':      True,
+    'data_labels':      False,
+    'error_bars':       True,
+    'major_gridlines':  True,
+    'minor_gridlines':  False,
+    'legend':           True,
+    'best_fit':         True,
+    'worst_fit':        True,
 }
 
-# Ordered list of (key, display_label) pairs for checkbox generation; order matches UI mockup
+_DEFAULT_LABEL_TEXTS: Dict[str, str] = {
+    'chart_title': '',   # empty string means use the screen's built-in default title
+    'x_title':     '',   # empty string means use input_data.x_title
+    'y_title':     '',   # empty string means use input_data.y_title
+}
+
+# Ordered checkbox rows; chart_title and axis_titles get inline Entry expansions
 _ELEMENT_LABELS = [
-    ('axes', 'Axes'), ('axis_titles', 'Axis Titles'), ('chart_title', 'Chart Title'),
-    ('data_labels', 'Data Labels'), ('error_bars', 'Error Bars'), ('gridlines', 'Gridlines'),
-    ('legend', 'Legend'), ('best_fit', 'Best Fit Line'), ('worst_fit', 'Worst Fit Lines'),
+    ('axes',            'Axes'),
+    ('axis_titles',     'Axis Titles'),        # expands with X and Y rename entries
+    ('chart_title',     'Chart Title'),        # expands with single title rename entry
+    ('data_labels',     'Data Labels'),        # renders as (x, y) coordinates <= 5 dp
+    ('error_bars',      'Error Bars'),
+    ('major_gridlines', 'Major Gridlines'),
+    ('minor_gridlines', 'Minor Gridlines'),
+    ('legend',          'Legend'),
+    ('best_fit',        'Best Fit Line'),
+    ('worst_fit',       'Worst Fit Lines'),    # omitted on Screen 3b via show_worst_fit=False
 ]
 
+# Keys whose checkbox rows also contain Entry widgets
+_KEYS_WITH_ENTRIES = {'axis_titles', 'chart_title'}
+
+
+
+# Helper
+def _fmt_coord(v: float) -> str:
+    """
+    Format a float to at most 3 decimal places, stripping trailing zeros.
+
+    e.g. 1.5000 -> '1.5',  2.0 -> '2',  0.123 -> '0.123'
+    Used for data-label coordinate annotations to satisfy a 'max 5 dp' standard.
+    """
+    return f"{v:.5f}".rstrip('0').rstrip('.')
+
+
+# ChartElementsPopup
 
 class ChartElementsPopup(tk.Toplevel):
     """
-    Excel-style chart customisation popup with checkboxes.
+    Excel-style chart customisation popup with checkboxes and inline label editors.
 
-    Implements the chart element toggle panel described in Section 3.2.1 (Branch 4 —
-    Options to toggle/change aspects) and Section 3.2.2 (User Interface, Screen 3a).
-    The 'always-on-top' behaviour and proximity to the parent window match the
-    accessibility and usability requirements in Section 3.1.4 (Usability Features).
-    Error bars and best/worst fit toggles directly control Algorithm 5 output
-    visibility (Section 3.2.2).
+    New in this version:
+      - Major and minor gridlines are separate independent toggles.
+      - Chart Title and Axis Titles rows include rename Entry fields.
+      - The update_callback receives (states, label_texts) so both visibility
+        and text overrides flow to the graph on every change.
+      - show_worst_fit=False omits the Worst Fit Lines row for Screen 3b.
     """
 
-    def __init__(self, parent, update_callback: Callable):
+    def __init__(
+        self,
+        parent,
+        update_callback: Callable,
+        show_worst_fit: bool = True,
+        initial_labels: Optional[Dict[str, str]] = None,
+    ):
         """
-        Initialise the Chart Elements popup.
-
         Args:
-            parent: Parent tkinter window.
-            update_callback: Called with a dict of element states whenever a toggle changes.
+            parent:           Parent Tk window.
+            update_callback:  Called as callback(states, label_texts) on any change.
+            show_worst_fit:   Include the Worst Fit Lines toggle (Screen 3a only).
+            initial_labels:   Pre-populate rename entries; keys: chart_title, x_title, y_title.
         """
         super().__init__(parent)
-        self.update_callback = update_callback  # triggers graph redraw in ChartCustomizationMixin
+        self.update_callback = update_callback
+        self.show_worst_fit  = show_worst_fit
 
         self.title("Chart Elements")
-        self.geometry("250x400")
-        self.resizable(False, False)
+        self.resizable(False, True)
+        self.minsize(320, 460)
+        popup_height = 660 if show_worst_fit else 630
+        self.geometry(f"320x{popup_height}")
         self.configure(bg="#f0f0f0")
         self.transient(parent)
-        self.attributes('-topmost', True)  # keeps popup visible above the main window
+        self.attributes('-topmost', True)
 
         self._position_window(parent)
 
-        # Initialise BooleanVars from shared defaults — False = hidden, True = shown
-        self.element_states = {k: tk.BooleanVar(value=v) for k, v in _DEFAULT_ELEMENT_STATES.items()}
+        # Boolean toggle BooleanVars
+        self.element_states: Dict[str, tk.BooleanVar] = {
+            k: tk.BooleanVar(value=v) for k, v in _DEFAULT_ELEMENT_STATES.items()
+        }
+
+        # Editable title StringVars; pre-populated from initial_labels if provided
+        init = initial_labels or {}
+        self.label_texts: Dict[str, tk.StringVar] = {
+            'chart_title': tk.StringVar(value=init.get('chart_title', '')),
+            'x_title':     tk.StringVar(value=init.get('x_title',     '')),
+            'y_title':     tk.StringVar(value=init.get('y_title',     '')),
+        }
+
+        # Entry widget references keyed by checkbox key, for enable/disable on toggle
+        self._entry_widgets: Dict[str, List[tk.Entry]] = {}
 
         self.create_ui()
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
-    def _position_window(self, parent):
-        """
-        Position the popup near the top-right of the parent window.
 
-        Ensures the panel does not obstruct the graph area, consistent with the
-        Excel-style interaction pattern identified in Section 3.1.3 (Research —
-        Microsoft Excel, Features That Can Be Adapted).
-        """
+    # Positioning
+
+    def _position_window(self, parent):
+        """Place popup near the top-right corner of the parent window."""
         self.update_idletasks()
-        x = parent.winfo_x() + parent.winfo_width() - 270
-        y = parent.winfo_y() + 100
+        x = parent.winfo_x() + parent.winfo_width() - 340
+        y = parent.winfo_y() + 80
         self.geometry(f"+{x}+{y}")
 
-    def create_ui(self):
-        """
-        Build the checkbox interface.
 
-        Constructs the header bar, scrollable checkbox list, separator, and action
-        buttons. The 'Reset to Default' and 'Apply' buttons satisfy the Error Recovery
-        usability requirement from Section 3.2.2 (Usability Features), allowing users
-        to undo visual changes without restarting the analysis.
-        """
+    # UI construction
+
+    def create_ui(self):
+        """Build header, element rows (with expandable rename sections), separator, and buttons."""
         header = tk.Frame(self, bg="#0078d4", height=35)
         header.pack(fill="x")
         header.pack_propagate(False)
-        tk.Label(header, text="⚙ Chart Elements", font=("Segoe UI", 11, "bold"),
+        tk.Label(header, text="Chart Elements", font=("Segoe UI", 11, "bold"),
                  bg="#0078d4", fg="white").pack(side="left", padx=10, pady=8)
 
-        content = tk.Frame(self, bg="white", padx=5, pady=10)
+        content = tk.Frame(self, bg="white", padx=5, pady=8)
         content.pack(fill="both", expand=True)
 
         for key, label in _ELEMENT_LABELS:
-            self.create_checkbox_item(content, key, label)  # one row per toggleable element
+            if key == 'worst_fit' and not self.show_worst_fit:
+                continue
+            if key == 'axis_titles':
+                self._create_axis_titles_item(content, key, label)
+            elif key == 'chart_title':
+                self._create_chart_title_item(content, key, label)
+            else:
+                self.create_checkbox_item(content, key, label)
 
-        ttk.Separator(content, orient="horizontal").pack(fill="x", pady=10)
+        ttk.Separator(content, orient="horizontal").pack(fill="x", pady=8)
 
-        button_frame = tk.Frame(content, bg="white")
-        button_frame.pack(fill="x", pady=5)
-        tk.Button(button_frame, text="Reset to Default", font=("Segoe UI", 9), bg="#f0f0f0",
-                  fg="#333", relief="solid", bd=1, cursor="hand2",
-                  command=self.reset_to_default).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Apply", font=("Segoe UI", 9, "bold"), bg="#0078d4",
-                  fg="white", relief="flat", cursor="hand2", padx=15,
-                  command=self.apply_changes).pack(side="right", padx=5)
+        btn_frame = tk.Frame(content, bg="white")
+        btn_frame.pack(fill="x", pady=4)
+        btn_frame.columnconfigure(0, weight=1)
+        btn_frame.columnconfigure(1, weight=1)
+        tk.Button(btn_frame, text="Reset to Default", font=("Segoe UI", 9),
+                  bg="#f0f0f0", fg="#333", relief="solid", bd=1, cursor="hand2",
+                  command=self.reset_to_default).grid(row=0, column=0, sticky="ew",
+                                                       padx=(5, 3), pady=2)
+        tk.Button(btn_frame, text="Apply", font=("Segoe UI", 9, "bold"),
+                  bg="#0078d4", fg="white", relief="flat", cursor="hand2",
+                  command=self.apply_changes).grid(row=0, column=1, sticky="ew",
+                                                    padx=(3, 5), pady=2)
 
     def create_checkbox_item(self, parent, key: str, label: str):
-        """
-        Create a single checkbox row with hover highlight.
-
-        Each checkbox controls one graph element as listed in _ELEMENT_LABELS. Hover
-        highlighting provides immediate visual feedback, addressing the usability goal
-        in Section 3.1.4 that the interface must be intuitive and accessible for
-        students (stakeholder M and DG interviews, Section 3.1.2).
-        """
+        """Standard toggle row with hover highlight for non-rename elements."""
         item_frame = tk.Frame(parent, bg="white", height=32)
         item_frame.pack(fill="x", pady=1)
         item_frame.pack_propagate(False)
 
-        checkbox = tk.Checkbutton(item_frame, text=label, variable=self.element_states[key],
-                                  font=("Segoe UI", 10), bg="white", activebackground="#e5f3ff",
-                                  selectcolor="white", relief="flat", cursor="hand2",
-                                  command=lambda: self.on_element_toggle(key))
+        checkbox = tk.Checkbutton(
+            item_frame, text=label, variable=self.element_states[key],
+            font=("Segoe UI", 10), bg="white", activebackground="#e5f3ff",
+            selectcolor="white", relief="flat", cursor="hand2",
+            command=lambda k=key: self._on_toggle(k),
+        )
         checkbox.pack(side="left", padx=10, pady=5, fill="both", expand=True)
 
         def on_enter(e):
-            item_frame.config(bg="#e5f3ff")  # blue tint on hover for visual affordance
+            item_frame.config(bg="#e5f3ff")
             checkbox.config(bg="#e5f3ff")
 
         def on_leave(e):
-            item_frame.config(bg="white")    # restore neutral background on mouse exit
+            item_frame.config(bg="white")
             checkbox.config(bg="white")
 
-        for widget in (item_frame, checkbox):
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
+        for w in (item_frame, checkbox):
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+
+    def _create_chart_title_item(self, parent, key: str, label: str):
+        """
+        Checkbox row + single Entry for renaming the chart title.
+        Entry is enabled/disabled to match the checkbox state.
+        """
+        outer = tk.Frame(parent, bg="white")
+        outer.pack(fill="x", pady=1)
+
+        cb_row = tk.Frame(outer, bg="white", height=32)
+        cb_row.pack(fill="x")
+        cb_row.pack_propagate(False)
+
+        checkbox = tk.Checkbutton(
+            cb_row, text=label, variable=self.element_states[key],
+            font=("Segoe UI", 10), bg="white", activebackground="#e5f3ff",
+            selectcolor="white", relief="flat", cursor="hand2",
+            command=lambda k=key: self._on_toggle(k),
+        )
+        checkbox.pack(side="left", padx=10, pady=5, fill="both", expand=True)
+
+        entry_row = tk.Frame(outer, bg="white")
+        entry_row.pack(fill="x", padx=(30, 8), pady=(0, 5))
+        tk.Label(entry_row, text="Title:", font=("Segoe UI", 8),
+                 bg="white", fg="#64748b").pack(side="left", padx=(0, 4))
+        entry = tk.Entry(entry_row, textvariable=self.label_texts['chart_title'],
+                         font=("Segoe UI", 9), relief="solid", bd=1)
+        entry.pack(side="left", fill="x", expand=True)
+
+        enabled = self.element_states[key].get()
+        entry.config(state='normal' if enabled else 'disabled',
+                     bg='white'   if enabled else '#f0f0f0')
+
+        self._entry_widgets[key] = [entry]
+        entry.bind("<FocusOut>", lambda e: self._fire_callback())
+        entry.bind("<Return>",   lambda e: self._fire_callback())
+
+        def on_enter(e):
+            cb_row.config(bg="#e5f3ff")
+            checkbox.config(bg="#e5f3ff")
+
+        def on_leave(e):
+            cb_row.config(bg="white")
+            checkbox.config(bg="white")
+
+        for w in (cb_row, checkbox):
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+
+    def _create_axis_titles_item(self, parent, key: str, label: str):
+        """
+        Checkbox row + two Entry rows for renaming X and Y axis titles independently.
+        Both entries are enabled/disabled together with the checkbox.
+        """
+        outer = tk.Frame(parent, bg="white")
+        outer.pack(fill="x", pady=1)
+
+        cb_row = tk.Frame(outer, bg="white", height=32)
+        cb_row.pack(fill="x")
+        cb_row.pack_propagate(False)
+
+        checkbox = tk.Checkbutton(
+            cb_row, text=label, variable=self.element_states[key],
+            font=("Segoe UI", 10), bg="white", activebackground="#e5f3ff",
+            selectcolor="white", relief="flat", cursor="hand2",
+            command=lambda k=key: self._on_toggle(k),
+        )
+        checkbox.pack(side="left", padx=10, pady=5, fill="both", expand=True)
+
+        grid = tk.Frame(outer, bg="white")
+        grid.pack(fill="x", padx=(30, 8), pady=(0, 5))
+        grid.columnconfigure(1, weight=1)
+
+        entries = []
+        for row_idx, (var_key, lbl_text) in enumerate([('x_title', 'X:'), ('y_title', 'Y:')]):
+            tk.Label(grid, text=lbl_text, font=("Segoe UI", 8), bg="white",
+                     fg="#64748b", width=2).grid(row=row_idx, column=0, sticky="w", pady=2)
+            ent = tk.Entry(grid, textvariable=self.label_texts[var_key],
+                           font=("Segoe UI", 9), relief="solid", bd=1)
+            ent.grid(row=row_idx, column=1, sticky="ew", padx=(4, 0), pady=2)
+            enabled = self.element_states[key].get()
+            ent.config(state='normal' if enabled else 'disabled',
+                       bg='white'   if enabled else '#f0f0f0')
+            ent.bind("<FocusOut>", lambda e: self._fire_callback())
+            ent.bind("<Return>",   lambda e: self._fire_callback())
+            entries.append(ent)
+
+        self._entry_widgets[key] = entries
+
+        def on_enter(e):
+            cb_row.config(bg="#e5f3ff")
+            checkbox.config(bg="#e5f3ff")
+
+        def on_leave(e):
+            cb_row.config(bg="white")
+            checkbox.config(bg="white")
+
+        for w in (cb_row, checkbox):
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+
+
+    # Event handlers
+
+    def _on_toggle(self, key: str):
+        """
+        Sync Entry enable state with checkbox, then fire the update callback.
+        For keys without Entry widgets this is a straightforward callback trigger.
+        """
+        enabled = self.element_states[key].get()
+        for w in self._entry_widgets.get(key, []):
+            w.config(state='normal' if enabled else 'disabled',
+                     bg='white'   if enabled else '#f0f0f0')
+        self._fire_callback()
+
+    def _fire_callback(self):
+        """Dispatch current states and label texts to the update callback."""
+        if self.update_callback:
+            self.update_callback(self.get_element_states(), self.get_label_texts())
 
     def on_element_toggle(self, key: str):
-        """
-        Notify callback when any checkbox is toggled.
+        """Public alias for _on_toggle — retained for backwards compatibility."""
+        self._on_toggle(key)
 
-        Triggers ChartCustomizationMixin.update_chart_elements(), which stores the new
-        state and calls refresh_graph() to redraw immediately — implementing the live
-        preview behaviour described in the dynamic graph scaling usability feature
-        (Section 3.2.2, Usability Features).
-        """
-        if self.update_callback:
-            self.update_callback(self.get_element_states())
 
+    # State accessors
     def get_element_states(self) -> Dict[str, bool]:
-        """
-        Return the current state of all elements as a plain dict.
+        """Return all boolean toggle states as a plain dict."""
+        return {k: v.get() for k, v in self.element_states.items()}
 
-        Used by ChartCustomizationMixin.update_chart_elements() and by
-        create_graph_with_customization() to determine which graph components
-        to render, corresponding to the user_settings variable in the Key Variables
-        table (Section 3.2.2).
-        """
-        return {key: var.get() for key, var in self.element_states.items()}
+    def get_label_texts(self) -> Dict[str, str]:
+        """Return all label text overrides as a plain dict."""
+        return {k: v.get() for k, v in self.label_texts.items()}
 
+
+    # Button actions
     def reset_to_default(self):
         """
-        Reset all checkboxes to their defaults and notify the callback.
-
-        Implements the Error Recovery usability feature from Section 3.2.2, allowing
-        users to restore the default graph state without re-running analysis.
+        Reset all toggles to defaults, clear rename fields, re-sync Entry states,
+        and fire the callback to redraw the graph immediately.
         """
         for key, value in _DEFAULT_ELEMENT_STATES.items():
             self.element_states[key].set(value)
-        if self.update_callback:
-            self.update_callback(self.get_element_states())  # redraw with defaults
+        for sv in self.label_texts.values():
+            sv.set('')
+        for key in _KEYS_WITH_ENTRIES:
+            enabled = self.element_states[key].get()
+            for w in self._entry_widgets.get(key, []):
+                w.config(state='normal' if enabled else 'disabled',
+                         bg='white'   if enabled else '#f0f0f0')
+        self._fire_callback()
 
     def apply_changes(self):
-        """
-        Apply current state and close the popup.
-
-        Provides an explicit confirmation step before closing, consistent with the
-        two-button pattern (Apply/Cancel) described in the Screen 4 UI design
-        (Section 3.2.2, User Interface).
-        """
-        if self.update_callback:
-            self.update_callback(self.get_element_states())
+        """Fire callback with current state then close the popup."""
+        self._fire_callback()
         self.destroy()
 
 
-class ChartCustomizationMixin:
+# ChartCustomisationMixin
+
+
+class ChartCustomisationMixin:
     """
-    Mixin that adds Chart Elements popup functionality to a graph results screen.
+    Mixin that adds Chart Elements popup management to a graph results screen.
 
-    Implements the 'Options to toggle/change aspects' sub-component from Section 3.2.1
-    (Branch 4 — Graphs) as a reusable mixin, following the modular OOP architecture
-    described in Section 3.3 Development. Designed to be mixed into LinearGraphDisplay
-    and AutomatedGraphDisplay without code duplication. Uses composition over inheritance
-    to keep graph-specific logic separate from UI customisation logic.
+    Stores both toggle states (chart_element_states) and text overrides
+    (chart_label_texts) so any create_graph() implementation can consult both.
     """
 
-    def init_chart_customization(self):
-        """
-        Initialise chart customisation state.
-
-        Called during screen construction to set up the popup reference and state dict.
-        Must be invoked before open_chart_elements() is used, ensuring the mixin
-        attributes exist regardless of the subclass constructor order.
-        """
-        self.chart_elements_popup = None            # reference to open popup (None if closed)
-        self.chart_element_states = dict(_DEFAULT_ELEMENT_STATES)  # current toggle state
+    def init_chart_customisation(self):
+        """Initialise mixin state. Must be called during the screen's __init__."""
+        self.chart_elements_popup  = None
+        self.chart_element_states  = dict(_DEFAULT_ELEMENT_STATES)
+        self.chart_label_texts     = dict(_DEFAULT_LABEL_TEXTS)
 
     def open_chart_elements(self):
-        """
-        Open the Chart Elements popup, or bring it to front if already open.
-
-        Prevents duplicate popups from being created, which would cause conflicting state
-        updates. This guard satisfies the usability requirement from Section 3.1.4 that
-        the interface must not produce confusing or unexpected behaviour.
-        """
+        """Open or lift the Chart Elements popup, passing current label overrides."""
         if self.chart_elements_popup is not None:
-            self.chart_elements_popup.lift()  # raise existing popup rather than opening another
+            self.chart_elements_popup.lift()
             return
 
-        self.chart_elements_popup = ChartElementsPopup(self.parent, self.update_chart_elements)
-        for key, value in self.chart_element_states.items():
-            if key in self.chart_elements_popup.element_states:
-                self.chart_elements_popup.element_states[key].set(value)  # restore current state
-        self.chart_elements_popup.protocol("WM_DELETE_WINDOW",
-                                           lambda: setattr(self, 'chart_elements_popup', None))
+        input_data = getattr(self, 'input_data', None)
+        initial_labels = {
+            'chart_title': self.chart_label_texts.get('chart_title', ''),
+            'x_title':     self.chart_label_texts.get('x_title', '') or
+                           (input_data.x_title if input_data else ''),
+            'y_title':     self.chart_label_texts.get('y_title', '') or
+                           (input_data.y_title if input_data else ''),
+        }
+        self.chart_elements_popup = ChartElementsPopup(
+            self.parent, self.update_chart_elements,
+            initial_labels=initial_labels,
+        )
+        for k, v in self.chart_element_states.items():
+            if k in self.chart_elements_popup.element_states:
+                self.chart_elements_popup.element_states[k].set(v)
 
-    def update_chart_elements(self, states: Dict[str, bool]):
-        """
-        Store updated element states and redraw the graph.
+        def _on_close():
+            self.chart_elements_popup.destroy()
+            self.chart_elements_popup = None
 
-        Called by ChartElementsPopup.on_element_toggle() and apply_changes(). Stores
-        the new state and triggers refresh_graph() to rebuild the Matplotlib figure,
-        implementing the live dynamic graph update described in Section 3.2.1 (Branch 4
-        — Display sub-component).
-        """
+        self.chart_elements_popup.protocol("WM_DELETE_WINDOW", _on_close)
+
+    def update_chart_elements(self, states: Dict[str, bool],
+                               label_texts: Optional[Dict[str, str]] = None):
+        """Store updated states and label texts, then redraw the graph."""
         self.chart_element_states = states
-        self.refresh_graph()  # destroy old canvas and redraw with new visibility settings
+        if label_texts is not None:
+            self.chart_label_texts = label_texts
+        self.refresh_graph()
 
     def refresh_graph(self):
-        """
-        Destroy existing canvas and figure, then recreate the graph.
-
-        Ensures stale Matplotlib figures are properly closed before a new one is drawn,
-        preventing memory leaks from accumulating Figure objects. Corresponds to the
-        performance testing requirement in Section 3.2.3 (Stage 1 — Large Dataset test).
-        """
+        """Destroy existing canvas/figure and call create_graph() to redraw."""
         if hasattr(self, 'canvas') and self.canvas:
             self.canvas.get_tk_widget().destroy()
         if hasattr(self, 'figure') and self.figure:
             import matplotlib.pyplot as plt
-            plt.close(self.figure)  # release Matplotlib memory
+            plt.close(self.figure)
         self.create_graph()
 
-    def create_graph_with_customization(self):
+    def apply_chart_customisation(self, ax, x, y, states: Dict[str, bool],
+                                    default_chart_title: str = ""):
         """
-        Modified create_graph that respects chart element states.
+        Apply all chart customisation to an existing Matplotlib Axes object.
 
-        Full reference implementation of the graph rendering pipeline described in
-        Section 3.2.1 (Branch 4 — Plotting sub-component) and Algorithm 8 from Section
-        3.2.2. Renders: scatter data points (Algorithm 1 input), error bars (Algorithm 4
-        output), best-fit line (Algorithm 1 gradient/intercept), worst-fit lines
-        (Algorithm 5 output), axis titles, legend, and gridlines — all conditionally
-        controlled by chart_element_states. Should replace or wrap create_graph() in
-        LinearGraphDisplay.py and AutomatedGraphDisplay.py.
+        Called at the end of create_graph() in both display screens after all data
+        series and fit curves have been added.
+
+        Handles:
+          - Data labels as '(x, y)' coordinate pairs, trailing zeros stripped, max 5 dp
+          - Major gridlines (dashed, subtle) and minor gridlines (dotted, very faint)
+          - Renamed Chart Title and Axis Titles from chart_label_texts
+          - Legend and axis spine/tick toggling
         """
-        import matplotlib.pyplot as plt
-        import numpy as np
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-        if self.input_data is None:
-            return
-
-        states = self.chart_element_states
-        self.figure = plt.Figure(figsize=(8, 5), dpi=100, facecolor='white')
-        ax = self.figure.add_subplot(111)  # single axes object; referenced by all plot calls
-
-        x, y = self.input_data.x_values, self.input_data.y_values
-        # Error bars are suppressed when the toggle is off (Section 3.2.2, Key Variable: error_bars)
-        x_err = self.input_data.x_error if states['error_bars'] else None
-        y_err = self.input_data.y_error if states['error_bars'] else None
-
-        # Plot data points with error bars — error bar display controlled by Algorithm 4 output
-        ax.errorbar(x, y, xerr=x_err, yerr=y_err, fmt='o', color='#3b82f6', ecolor='#94a3b8',
-                    capsize=4, markersize=6, label='Data points' if states['legend'] else '', zorder=3)
-
-        if states['data_labels']:
-            # Annotate each point with its y-value for educational clarity (Section 3.2.2, data_labels)
+        if states.get('data_labels'):
             for xi, yi in zip(x, y):
-                ax.annotate(f'{yi:.2f}', (xi, yi), textcoords="offset points",
-                            xytext=(0, 8), ha='center', fontsize=8, color='#333')
+                ax.annotate(
+                    f'({_fmt_coord(xi)}, {_fmt_coord(yi)})',
+                    (xi, yi), textcoords="offset points", xytext=(0, 10),
+                    ha='center', fontsize=7, color='#334155',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
+                              alpha=0.75, edgecolor='none'),
+                )
 
-        if states['best_fit']:
-            # Draw best-fit line using gradient and intercept from Algorithm 1 (Section 3.2.2)
-            x_line = np.linspace(x[0], x[-1], 100)
-            ax.plot(x_line, self.best_fit_gradient * x_line + self.best_fit_intercept,
-                    color='#10b981', linewidth=2, label='Best fit' if states['legend'] else '', zorder=2)
+        if states.get('major_gridlines'):
+            ax.grid(True, which='major', alpha=0.35, linestyle='--', linewidth=0.6)
+        if states.get('minor_gridlines'):
+            ax.minorticks_on()
+            ax.grid(True, which='minor', alpha=0.18, linestyle=':', linewidth=0.4)
 
-        if states['worst_fit'] and y_err is not None:
-            # Draw steepest and shallowest worst-fit lines from Algorithm 5 (Section 3.2.2)
-            x_pts = [x[0], x[-1]]
-            ax.plot(x_pts, [y[0] + y_err[0], y[-1] - y_err[-1]], color='#ef4444', linestyle='--',
-                    linewidth=1.5, label='Worst fit (max)' if states['legend'] else '', zorder=1)
-            ax.plot(x_pts, [y[0] - y_err[0], y[-1] + y_err[-1]], color='#f97316', linestyle='--',
-                    linewidth=1.5, label='Worst fit (min)' if states['legend'] else '', zorder=1)
+        if states.get('chart_title'):
+            title_text = self.chart_label_texts.get('chart_title') or default_chart_title
+            ax.set_title(title_text, fontsize=13, fontweight='bold', pad=15)
 
-        if states['axis_titles']:
-            # Use transformed axis titles (e.g., "ln(Intensity)") updated by DataTransform.py
-            ax.set_xlabel(self.input_data.x_title or "X", fontsize=11, fontweight='bold')
-            ax.set_ylabel(self.input_data.y_title or "Y", fontsize=11, fontweight='bold')
-        if states['chart_title']:
-            ax.set_title("Linear Regression Analysis", fontsize=13, fontweight='bold', pad=15)
-        if states['gridlines']:
-            ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)  # subtle gridlines per UI mockup
-        if states['legend']:
+        if states.get('axis_titles'):
+            input_data = getattr(self, 'input_data', None)
+            x_label = (self.chart_label_texts.get('x_title')
+                       or (input_data.x_title if input_data else '') or "X")
+            y_label = (self.chart_label_texts.get('y_title')
+                       or (input_data.y_title if input_data else '') or "Y")
+            ax.set_xlabel(x_label, fontsize=11, fontweight='bold')
+            ax.set_ylabel(y_label, fontsize=11, fontweight='bold')
+
+        if states.get('legend'):
             ax.legend(loc='best', framealpha=0.9, fontsize=9)
-        if not states['axes']:
-            # Hide all axis spines and ticks when axes toggle is off
-            ax.set_frame_on(False)
+
+        if not states.get('axes'):
+            for spine in ax.spines.values():
+                spine.set_visible(False)
             ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
-        self.figure.tight_layout()
-        self.canvas = FigureCanvasTkAgg(self.figure, master=self.graph_frame)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+
+
+# Standalone demo / white-box test runner
 
 
 if __name__ == "__main__":
-    import numpy as np
-
     class DemoWindow:
-        """Standalone demonstration of ChartElementsPopup — used for development testing."""
+        """Standalone test harness for ChartElementsPopup."""
         def __init__(self, root):
             self.root = root
             self.root.title("Chart Elements Demo")
-            self.root.geometry("600x400")
+            self.root.geometry("600x420")
             self.chart_states = dict(_DEFAULT_ELEMENT_STATES)
+            self.chart_labels = dict(_DEFAULT_LABEL_TEXTS)
 
-            self.info_label = tk.Label(root, text="Click 'Open Chart Elements' to customize",
-                                       font=("Segoe UI", 14), pady=20)
-            self.info_label.pack()
+            tk.Label(root, text="Click 'Open Chart Elements' to customise",
+                     font=("Segoe UI", 14), pady=20).pack()
 
-            self.state_text = tk.Text(root, height=15, width=50, font=("Courier", 10))
+            self.state_text = tk.Text(root, height=16, width=55, font=("Courier", 9))
             self.state_text.pack(pady=10)
-            self.update_state_display()
+            self._refresh_display()
 
             tk.Button(root, text="Open Chart Elements", font=("Segoe UI", 12, "bold"),
-                      bg="#0078d4", fg="white", padx=30, pady=10, command=self.open_popup).pack(pady=10)
+                      bg="#0078d4", fg="white", padx=30, pady=10,
+                      command=self.open_popup).pack(pady=10)
 
         def open_popup(self):
-            popup = ChartElementsPopup(self.root, self.on_elements_changed)
+            popup = ChartElementsPopup(self.root, self.on_changed,
+                                       initial_labels=self.chart_labels)
             for key, value in self.chart_states.items():
                 if key in popup.element_states:
-                    popup.element_states[key].set(value)  # restore current state on each open
+                    popup.element_states[key].set(value)
 
-        def on_elements_changed(self, states):
+        def on_changed(self, states, label_texts):
             self.chart_states = states
-            self.update_state_display()
+            self.chart_labels = label_texts
+            self._refresh_display()
 
-        def update_state_display(self):
-            """Refresh the text widget to show current element states — white-box testing aid."""
+        def _refresh_display(self):
             self.state_text.delete(1.0, tk.END)
-            self.state_text.insert(1.0, "Current Chart Element States:\n\n")
-            for key, value in self.chart_states.items():
-                self.state_text.insert(tk.END, f"{'✔ ON ' if value else '✗ OFF'}  {key.replace('_', ' ').title()}\n")
+            self.state_text.insert(tk.END, "Toggles:\n")
+            for k, v in self.chart_states.items():
+                self.state_text.insert(tk.END, f"  {'on ' if v else 'off'}  {k}\n")
+            self.state_text.insert(tk.END, "\nLabel overrides:\n")
+            for k, v in self.chart_labels.items():
+                self.state_text.insert(tk.END, f"  {k}: {repr(v)}\n")
 
     root = tk.Tk()
-    app = DemoWindow(root)
+    DemoWindow(root)
     root.mainloop()

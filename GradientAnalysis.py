@@ -20,6 +20,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from NumberFormatting import format_number, format_number_with_uncertainty
+from ManagingScreens import make_scrollable
 
 
 # Unit-to-SI conversion factors (multiply measurement by factor to get SI value)
@@ -205,9 +206,11 @@ class GradientAnalysisScreen(tk.Frame):
     def create_layout(self):
         """Create the main UI layout for Screen 4."""
         self.configure(padx=30, pady=20)
+        self.grid_rowconfigure(2, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
         header = tk.Frame(self, bg="white", height=50)
-        header.pack(fill="x", pady=(0, 20))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         header.pack_propagate(False)
 
         tk.Button(header, text="Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
@@ -216,14 +219,9 @@ class GradientAnalysisScreen(tk.Frame):
                  bg="white", fg="#0f172a").pack(side="left", padx=(10, 0), pady=10)
 
         tk.Label(self, text="Gradient Analysis & Results", font=("Segoe UI", 22, "bold"),
-                 bg="#f5f6f8", fg="#0f172a").pack(pady=(10, 30))
+                 bg="#f5f6f8", fg="#0f172a").grid(row=1, column=0, pady=(10, 30))
 
-        container = tk.Frame(self, bg="#e5e7eb", relief="solid", bd=1)
-        container.pack(fill="both", expand=True)
-        inner = tk.Frame(container, bg="white")
-        inner.pack(fill="both", expand=True, padx=2, pady=2)
-        content = tk.Frame(inner, bg="white")
-        content.pack(fill="both", expand=True, padx=25, pady=25)
+        _, content, _, _ = make_scrollable(self, row=2, column=0, bg="white", panel_kwargs={"padx": 25, "pady": 25})
 
         # Four sections matching Section 3.2.2 Screen 4 design
         self.create_equation_section(content)     # Section 1

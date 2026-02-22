@@ -15,17 +15,13 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from LineaX_Classes import InputData, LinearGraph
 from ManagingScreens import make_scrollable, ScreenManager
-from GraphSettings import ChartElementsPopup
+from GraphSettings import ChartElementsPopup, _DEFAULT_ELEMENT_STATES, _DEFAULT_LABEL_TEXTS, _fmt_coord
 from GradientAnalysis import GradientAnalysisScreen
 from NumberFormatting import format_number, format_number_with_uncertainty
 from typing import Optional, Dict
 
-# Default visibility states for Screen 3a chart elements
-# Matches the initial element states shown in the Section 3.2.2 Screen 3a UI design
-_DEFAULT_STATES: Dict[str, bool] = {
-    'axes': True, 'axis_titles': True, 'chart_title': True, 'data_labels': False,
-    'error_bars': True, 'gridlines': True, 'legend': True, 'best_fit': True, 'worst_fit': True,
-}
+# Screen 3a uses the canonical defaults from GraphSettings — no local copy needed.
+# _DEFAULT_ELEMENT_STATES is imported above and used directly for __init__ setup.
 
 
 class LinearGraphResultsScreen(tk.Frame):
@@ -64,7 +60,8 @@ class LinearGraphResultsScreen(tk.Frame):
 
         self.figure = self.canvas = None
         self.chart_elements_popup = None
-        self.chart_element_states = dict(_DEFAULT_STATES)
+        self.chart_element_states = dict(_DEFAULT_ELEMENT_STATES)
+        self.chart_label_texts     = dict(_DEFAULT_LABEL_TEXTS)
 
         if self._load_data_and_analyze():
             self.create_layout()
@@ -154,9 +151,11 @@ class LinearGraphResultsScreen(tk.Frame):
     def create_layout(self):
         """Build the full results UI for Screen 3a."""
         self.configure(padx=20, pady=20)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        header = tk.Frame(self, bg="white", height=60)
-        header.pack(fill="x", pady=(0, 15))
+        header = tk.Frame(self, bg="white", height=80)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 15))
         header.pack_propagate(False)
 
         tk.Button(header, text="Back", font=("Segoe UI", 10), bg="#e5e7eb", fg="#0f172a",
@@ -176,8 +175,7 @@ class LinearGraphResultsScreen(tk.Frame):
             tk.Button(btn_frame, text=text, font=("Segoe UI", 10), bg="white", fg="#0f172a",
                       relief="solid", bd=1, padx=20, pady=5, cursor="hand2", command=cmd).pack(side="left", padx=5)
 
-        content = tk.Frame(self, bg="white", relief="solid", bd=1)
-        content.pack(fill="both", expand=True, padx=10, pady=10)
+        _, content, _, _ = make_scrollable(self, row=1, column=0, bg="white", padx=(10, 10), pady=(10, 10))
 
         self.graph_frame = tk.Frame(content, bg="white")
         self.graph_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -221,10 +219,15 @@ class LinearGraphResultsScreen(tk.Frame):
                     fmt='o', color='#3b82f6', ecolor='#94a3b8', capsize=4, markersize=6,
                     label='Data points' if states['legend'] else '', zorder=3)
 
-        if states['data_labels']:
+        if states.get('data_labels'):
             for xi, yi in zip(x, y):
-                ax.annotate(f'{yi:.2f}', (xi, yi), textcoords="offset points",
-                            xytext=(0, 8), ha='center', fontsize=8, color='#333')
+                ax.annotate(
+                    f'({_fmt_coord(xi)}, {_fmt_coord(yi)})',
+                    (xi, yi), textcoords="offset points", xytext=(0, 10),
+                    ha='center', fontsize=7, color='#334155',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
+                              alpha=0.75, edgecolor='none'),
+                )
 
         if states['best_fit']:
             x_line = np.linspace(x[0], x[-1], 100)
@@ -235,13 +238,19 @@ class LinearGraphResultsScreen(tk.Frame):
         if states['worst_fit'] and self.input_data.y_error is not None:
             self._plot_worst_fit(ax, x, y, self.input_data.y_error, states['legend'])
 
-        if states['chart_title']:
-            ax.set_title("Linear Regression Analysis", fontsize=13, fontweight='bold', pad=15)
-        if states['axis_titles']:
-            ax.set_xlabel(self.input_data.x_title or "X", fontsize=11, fontweight='bold')
-            ax.set_ylabel(self.input_data.y_title or "Y", fontsize=11, fontweight='bold')
-        if states['gridlines']:
-            ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        if states.get('chart_title'):
+            title_text = self.chart_label_texts.get('chart_title') or "Linear Regression Analysis"
+            ax.set_title(title_text, fontsize=13, fontweight='bold', pad=15)
+        if states.get('axis_titles'):
+            x_label = self.chart_label_texts.get('x_title') or self.input_data.x_title or "X"
+            y_label = self.chart_label_texts.get('y_title') or self.input_data.y_title or "Y"
+            ax.set_xlabel(x_label, fontsize=11, fontweight='bold')
+            ax.set_ylabel(y_label, fontsize=11, fontweight='bold')
+        if states.get('major_gridlines'):
+            ax.grid(True, which='major', alpha=0.35, linestyle='--', linewidth=0.6)
+        if states.get('minor_gridlines'):
+            ax.minorticks_on()
+            ax.grid(True, which='minor', alpha=0.18, linestyle=':', linewidth=0.4)
         if states['legend']:
             ax.legend(loc='best', framealpha=0.9, fontsize=9)
         if not states['axes']:
@@ -320,23 +329,39 @@ class LinearGraphResultsScreen(tk.Frame):
         """
         Open or bring to front the Chart Elements popup.
 
-        Instantiates ChartElementsPopup from GraphSettings.py (Section 3.2.1 Branch 4
-        Options — 'Options to toggle/change aspects of the graph'). The popup applies
-        changes immediately via update_chart_elements callback and refresh_graph().
+        Passes initial_labels so rename entries are pre-populated with current
+        label overrides (or the input data titles on first open). The WM_DELETE_WINDOW
+        handler destroys the window AND clears the reference so re-opening works.
         """
         if self.chart_elements_popup is not None:
             self.chart_elements_popup.lift()
             return
-        self.chart_elements_popup = ChartElementsPopup(self.parent, self.update_chart_elements)
+        initial_labels = {
+            'chart_title': self.chart_label_texts.get('chart_title', ''),
+            'x_title':     self.chart_label_texts.get('x_title', '') or
+                           (self.input_data.x_title if self.input_data else ''),
+            'y_title':     self.chart_label_texts.get('y_title', '') or
+                           (self.input_data.y_title if self.input_data else ''),
+        }
+        self.chart_elements_popup = ChartElementsPopup(
+            self.parent, self.update_chart_elements, initial_labels=initial_labels
+        )
         for k, v in self.chart_element_states.items():
             if k in self.chart_elements_popup.element_states:
                 self.chart_elements_popup.element_states[k].set(v)
-        self.chart_elements_popup.protocol("WM_DELETE_WINDOW",
-                                           lambda: setattr(self, 'chart_elements_popup', None))
 
-    def update_chart_elements(self, states: Dict[str, bool]):
-        """Receive updated element states from the popup and refresh the graph."""
+        def _on_close():
+            self.chart_elements_popup.destroy()
+            self.chart_elements_popup = None
+
+        self.chart_elements_popup.protocol("WM_DELETE_WINDOW", _on_close)
+
+    def update_chart_elements(self, states: Dict[str, bool],
+                               label_texts: Optional[Dict[str, str]] = None):
+        """Receive updated toggle states and label text overrides; redraw the graph."""
         self.chart_element_states = states
+        if label_texts is not None:
+            self.chart_label_texts = label_texts
         self.refresh_graph()
 
     def refresh_graph(self):
