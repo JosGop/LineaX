@@ -961,7 +961,7 @@ class AnalysisMethodScreen(tk.Frame):
         Rebuild the measurement units input section after linearisation.
 
         Renders one row per measured axis variable with an Entry pre-filled with
-        'SI units'.  The values entered here are stored in equation_info['measurement_units']
+        'Units'.  The values entered here are stored in equation_info['measurement_units']
         and forwarded to GradientAnalysis.py for display and potential unit conversion
         on Screen 4 (Section 3.2.2, User Interface — Screen 4, Section 2: Calculated
         Unknown Value).
@@ -996,7 +996,7 @@ class AnalysisMethodScreen(tk.Frame):
 
             entry = tk.Entry(row, width=20)
             entry.pack(side="left", padx=(0, 10))
-            entry.insert(0, "SI units")
+            entry.insert(0, "Units")
 
             tk.Label(row, text=f"({meaning})", fg="#6b7280", bg="white",
                      font=("Segoe UI", 9)).pack(side="left", fill="x", expand=True)
@@ -1275,11 +1275,11 @@ class AnalysisMethodScreen(tk.Frame):
                     except ValueError:
                         pass  # invalid constant entries are silently skipped
 
-            # Collect non-SI unit strings, ignoring the placeholder 'SI units' value
+            # Collect non-SI unit strings, ignoring the placeholder 'Units' value
             measurement_units: dict = {
                 var: entry.get().strip()
                 for var, entry in self.unit_entries.items()
-                if entry.get().strip() and entry.get().strip() != "SI units"
+                if entry.get().strip() and entry.get().strip() != "Units"
             }
 
             equation_info = {
