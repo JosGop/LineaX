@@ -12,8 +12,8 @@ from LineaX_Classes import InputData
 from AnalysisMethod import AnalysisMethodScreen
 from ManagingScreens import make_scrollable, ScreenManager
 
-# Column header labels used in the manual entry table (Section 3.2.2 Screen 1 UI design)
-_MANUAL_HEADERS = ["X Val", "X Err", "Y Val", "Y Err"]
+# Column header labels used in the manual entry table
+_MANUAL_HEADERS = ["X / Independent", "X Error", "Y / Dependent", "Y Error"]
 
 
 def _btn(parent, text, command, bg="#0f172a", fg="white", font_size=10, bold=True, **kwargs) -> tk.Button:
