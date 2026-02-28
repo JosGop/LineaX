@@ -178,7 +178,7 @@ class ScreenManager:
         """Restore the previous screen from the navigation stack.
 
         pack_forget() hides the current screen; the previous screen is re-shown
-        via pack without being re-instantiated, so all widget state is preserved.
+        via pack without being re-instantiated, so all widget states are preserved.
         Satisfies success criterion 1.2.1.
         """
         if not self.stack:
@@ -186,3 +186,4 @@ class ScreenManager:
         self.current_screen.pack_forget()
         self.current_screen = self.stack.pop()
         self.current_screen.pack(fill="both", expand=True)
+

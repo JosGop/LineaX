@@ -434,3 +434,4 @@ class GradientAnalysisScreen(tk.Frame):
                                 "You can reopen this project later to continue your analysis.")
         except Exception as e:
             messagebox.showerror("Save Failed", f"Could not save project:\n{e}")
+

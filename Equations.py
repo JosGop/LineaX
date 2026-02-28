@@ -305,3 +305,4 @@ class EquationLibrary:
             # On first token, initialise matched; on subsequent tokens, intersect.
             matched = self._index[token] if not matched else matched & self._index[token]
         return [self._equations[i] for i in matched]
+

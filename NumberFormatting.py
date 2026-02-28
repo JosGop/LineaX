@@ -149,3 +149,4 @@ if __name__ == "__main__":
     for value, uncertainty in [(5.0912e-2, 7.594e-4), (510.79, 5.2), (0.00123, 0.00005), (123456, 234)]:
         print(f"{value:.4e} +/- {uncertainty:.4e}")
         print(f"  -> {format_number_with_uncertainty(value, uncertainty)}\n")
+

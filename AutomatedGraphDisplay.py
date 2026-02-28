@@ -400,3 +400,4 @@ class AutomatedGraphResultsScreen(tk.Frame):
         tk.Label(error_container,
                  text="There was an error loading or analysing the data.\nPlease go back and check your data.",
                  font=("Segoe UI", 12), bg="white", fg="#64748b", justify="center").pack(pady=(0, 20))
+

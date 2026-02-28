@@ -36,7 +36,7 @@ def resolution(num) -> Decimal:
     """Return the measurement resolution of a number (Algorithm 3, Section 3.2.2).
 
     Converts num to a Decimal string to avoid floating-point representation errors,
-    then reads the exponent from the Decimal tuple.  For example, 0.01 returns
+    then reads the exponent from the Decimal tuple. For example, 0.01 returns
     Decimal('1e-2'), giving the smallest increment the instrument can resolve.
 
     Decimal.as_tuple() returns a DecimalTuple(sign, digits, exponent); the exponent
@@ -244,3 +244,5 @@ class LinearGraph(Graph):
     def calculate_uncertainty(self):
         # Uncertainty is derived from the np.polyfit covariance matrix in LinearGraphResultsScreen.
         pass
+
+

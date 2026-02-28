@@ -2,7 +2,7 @@
 
 DataTransformer applies axis transformations to an InputData instance and propagates
 measurement uncertainties through each transform using standard error propagation rules
-(Algorithm 6, Section 3.2.2).  The resulting transformed InputData is stored in
+(Algorithm 6, Section 3.2.2). The resulting transformed InputData is stored in
 ScreenManager by AnalysisMethodScreen and passed to LinearGraphResultsScreen.
 
 Error propagation formulas implemented here:
@@ -33,7 +33,7 @@ class DataTransformer:
     """Transforms experimental data based on linearisation requirements (Algorithm 2 / 6).
 
     Wraps a raw InputData instance and produces a new transformed InputData via
-    transform_for_linearisation().  Each axis is routed through _transform_axis,
+    transform_for_linearisation(). Each axis is routed through _transform_axis,
     which dispatches to the appropriate helper (_apply_log_transform etc.) based
     on the transform label string produced by AnalysisMethodScreen._identify_transforms.
     """
@@ -56,7 +56,7 @@ class DataTransformer:
         Delegates each axis to _transform_axis, then assembles a new InputData with
         the transformed values, propagated errors and updated axis titles.
         Called by AnalysisMethodScreen._linearise_equation after Algorithm 2 determines
-        the required transforms.  The result is deposited into ScreenManager for
+        the required transforms. The result is deposited into ScreenManager for
         LinearGraphResultsScreen (Section 3.2.1, Data Flow).
         """
         self.transformed_data = InputData()
@@ -139,7 +139,7 @@ class DataTransformer:
     def _apply_exp_transform(self, values, errors):
         """Apply exponential and propagate error: Δexp(x) = exp(x) · Δx (Algorithm 6).
 
-        np.exp computes e^x element-wise.  The derivative of exp(x) is exp(x) itself,
+        np.exp computes e^x element-wise. The derivative of exp(x) is exp(x) itself,
         so the propagated error is the product of the transform result and the input error.
         """
         new_vals = np.exp(values)
@@ -249,3 +249,4 @@ def identify_required_transformations(linearised_eq: sp.Eq, x_var: str, y_var: s
                     break
 
     return x_transform, y_transform
+
