@@ -1,58 +1,54 @@
-"""
-NumberFormatting.py
+"""NumberFormatting.py — Consistent number display utilities for LineaX.
 
-Utility functions for displaying numerical values consistently across LineaX.
-Implements the number display requirements from Section 3.2.2 (Key Variables,Data Structures, and Validation) — specifically
-the annotation_text, gradient, gradient_uncertainty, and R_squared variables, which must be formatted to a consistent number
-of significant figures. The standard form threshold (exponent outside [-3, 4]) corresponds to the sig_figs validation rule
-in user_settings (Section 3.2.2). Also satisfies the success criterion in Section 3.1.4 (Measurable Success Criteria) that
-results must be presented to an appropriate number of significant figures, with correct scientific notation for very large
-or small values.
+All result values displayed to the user pass through one of the four public
+functions here to ensure consistent significant figures and notation, satisfying
+success criterion 2.3.1 (results must be presented to an appropriate precision).
+
+Standard form is used for very large or very small values (exponent outside
+-3 to +4) to match the OCR Physics A convention for scientific notation.
 """
 
+# math provides floor and log10 for computing the decimal exponent of a number,
+# as well as isnan and isinf for guarding against degenerate floating-point values.
 import math
+
+# Optional is used in type hints to indicate that a value may be None.
 from typing import Optional
 
-# Superscript character map for exponent formatting in standard form display
+# Translation table mapping ASCII digit/sign characters to Unicode superscript equivalents,
+# used to render exponents as e.g. ×10² rather than ×10^2.
 _SUPERSCRIPT = str.maketrans('0123456789+-', '⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻')
 
 
 def format_exponent(exponent: int) -> str:
-    """
-    Return the exponent as a superscript Unicode string.
+    """Return the exponent as a Unicode superscript string.
 
-    Used by format_number() to render standard form notation (e.g., ×10⁻⁴) in graph annotations and results panels.
-    Unicode superscripts ensure the notation displays correctly in Tkinter labels without requiring LaTeX rendering, consistent
-    with the accessibility requirements in Section 3.1.4 (Limitations).
+    str.translate applies the _SUPERSCRIPT mapping character by character,
+    converting each ASCII digit to its Unicode superscript equivalent.
     """
     return str(exponent).translate(_SUPERSCRIPT)
 
 
 def format_number(value: float, sig_figs: int = 4) -> str:
-    """
-    Format a number using decimal notation or standard form.
+    """Format a number in decimal notation or standard form to sig_figs significant figures.
 
-    Implements the number display logic required across multiple screens: the gradient and intercept values on Screen 3a
-    (Linear Graph Output), the R² value on Screen 3b (Automated Graph Output), and the physical constant results on Screen 4
-    (Gradient Analysis & Results), all described in Section 3.2.2 (User Interface). Switches between decimal and standard
-    form based on the exponent range, consistent with the sig_figs validation rule (2–6) from the user_settings variable
-    in the Key Variables table (Section 3.2.2).
+    Decision rule (implements the display logic in Section 3.2.2, Results Panel):
+      - Returns decimal notation when -3 <= exponent <= 4 (e.g. 0.001 to 9999).
+      - Returns standard form (×10ⁿ with Unicode superscript) outside that range.
 
-    Uses decimal notation when -3 ≤ exponent ≤ 4; standard form (×10ⁿ) otherwise.
-
-    Args:
-        value: The number to format.
-        sig_figs: Number of significant figures (default 4).
-
-    Returns:
-        Formatted string, e.g. "0.00123" or "1.23×10⁻⁴".
+    math.log10 computes the base-10 logarithm; math.floor converts it to an integer
+    exponent, giving the order of magnitude of the value.
+    rstrip('0').rstrip('.') removes trailing zeros and the trailing decimal point
+    from the formatted string to produce clean output (e.g. '1.50' becomes '1.5').
     """
     if value is None:
-        return "—"  # em-dash indicates missing value consistently across all result panels
+        return "N/A"
     try:
         value = float(value)
     except (TypeError, ValueError):
-        return "—"
+        return "N/A"
+
+    # Guard against non-finite values before attempting logarithm.
     if math.isnan(value):
         return "NaN"
     if math.isinf(value):
@@ -63,125 +59,93 @@ def format_number(value: float, sig_figs: int = 4) -> str:
     try:
         sign = "-" if value < 0 else ""
         abs_value = abs(value)
+
+        # math.floor(math.log10(x)) gives the integer exponent of x in base 10.
         exponent = math.floor(math.log10(abs_value))
 
         if -3 <= exponent <= 4:
-            # Decimal notation range — strip trailing zeros for clean presentation
+            # Decimal notation: compute required decimal places from sig_figs and exponent.
             decimal_places = max(0, sig_figs - exponent - 1) if exponent >= 0 else sig_figs - exponent - 1
             formatted = f"{abs_value:.{decimal_places}f}"
             if '.' in formatted:
                 formatted = formatted.rstrip('0').rstrip('.')
             return sign + formatted
 
-        # Standard form for values outside the decimal range
+        # Standard form: divide by 10^exponent to get coefficient in [1, 10).
         coef_str = f"{abs_value / (10 ** exponent):.{sig_figs - 1}f}".rstrip('0').rstrip('.')
         return f"{sign}{coef_str}×10{format_exponent(exponent)}"
 
     except (ValueError, OverflowError, ZeroDivisionError):
-        return f"{value:.{sig_figs}g}"  # fallback to Python's own general format
+        # Fallback to Python's built-in general format for edge cases.
+        return f"{value:.{sig_figs}g}"
 
 
 def format_number_with_uncertainty(value: float, uncertainty: float, sig_figs: int = 3) -> str:
-    """
-    Format a value with its uncertainty as "value ± uncertainty".
+    """Format a value with its uncertainty as 'value ± uncertainty'.
 
-    Used to display the gradient and physical constant results on Screen 4 (Sectionm 3.2.2, User Interface — Gradient Analysis
-    & Results), e.g. "k = 48.5 ± 2.1 N/m".
-    Also used for the gradient_uncertainty variable from the Key Variables table (Section 3.2.2), which is computed by
-    Algorithm 5 (worst-fit line calculation).
-    Handles NaN and Inf uncertainties gracefully, as required by the validation rule that gradient_uncertainty must be
-    non-negative (Section 3.2.2, Key Variables).
-
-    Args:
-        value: The measured value.
-        uncertainty: The measurement uncertainty.
-        sig_figs: Significant figures for both numbers (default 3).
-
-    Returns:
-        Formatted string, e.g. "5.09×10⁻² ± 7.59×10⁻⁴".
+    Both value and uncertainty are formatted independently via format_number so
+    they share the same significant figures and notation convention.
+    Used to display gradient and intercept results on Screen 3a and Screen 4,
+    satisfying success criterion 2.3.1.
     """
     try:
         uncertainty = float(uncertainty) if uncertainty is not None else 0.0
     except (TypeError, ValueError):
         uncertainty = 0.0
+
+    # isnan / isinf guard against propagated floating-point errors from regression.
     if math.isnan(uncertainty) or math.isinf(uncertainty):
-        uncertainty = 0.0  # treat non-finite uncertainty as zero to prevent display errors
+        uncertainty = 0.0
 
     if uncertainty == 0:
-        return format_number(value, sig_figs)  # omit ± 0 for cleaner result presentation
+        return format_number(value, sig_figs)
     return f"{format_number(value, sig_figs)} ± {format_number(uncertainty, sig_figs)}"
 
 
 def format_percentage(value: float, decimal_places: int = 2) -> str:
-    """
-    Return a percentage string, e.g. "5.23%".
+    """Return a percentage string, e.g. '5.23%'.
 
-    Used to display the percentage difference between experimental and accepted values on Screen 4 (Section 3.2.2, Section 3:
-    Compare with Known Value), computed as |(experimental - accepted) / accepted| × 100%.
+    Used to display worst-fit percentage differences on Screen 3a (Algorithm 5,
+    Section 3.2.2) and percentage difference comparisons on Screen 4.
     """
     return f"{value:.{decimal_places}f}%"
 
 
 def format_scientific_for_display(value: float) -> str:
-    """
-    Format a number for display in equations using ^ notation.
+    """Format a number using ^ notation for Matplotlib annotation compatibility.
 
-    Alternative to format_number() for contexts where Unicode superscripts may not render correctly, such as equation
-    annotation strings (annotation_text variable, Section 3.2.2 Key Variables) that are passed to Matplotlib ax.annotate().
-    Uses ×10^n notation instead of Unicode superscripts to ensure compatibility across rendering backends.
-
-    Returns:
-        Formatted string, e.g. "5.09×10^-2" or "510.79".
+    Matplotlib's mathtext renderer uses ^ for superscripts in axis annotations,
+    so this function returns strings such as '1.23×10^-4' rather than '1.23×10⁻⁴'.
+    The logic mirrors format_number but always uses ^ rather than Unicode superscripts.
     """
     if value == 0:
         return "0"
-
     sign = "-" if value < 0 else ""
     abs_value = abs(value)
     exponent = math.floor(math.log10(abs_value))
-
     if -3 <= exponent <= 4:
-        # Same decimal range as format_number but with ^ notation
         decimal_places = max(0, 4 - exponent - 1) if exponent >= 0 else 4 - exponent - 1
         formatted = f"{abs_value:.{decimal_places}f}"
         if '.' in formatted:
             formatted = formatted.rstrip('0').rstrip('.')
         return sign + formatted
-
-    # Standard form with caret notation for Matplotlib compatibility
     coef_str = f"{abs_value / (10 ** exponent):.3f}".rstrip('0').rstrip('.')
     return f"{sign}{coef_str}×10^{exponent}"
 
 
 if __name__ == "__main__":
-    """
-    Manual test cases for white-box testing during Stage 1 development (Section 3.2.3).
-
-    Each case corresponds to a boundary or typical value from the Extreme Values and Computation Accuracy test scenarios 
-    in the Stage 1 testing table (Section 3.2.3). Verifies that format_number() correctly switches between decimal and standard 
-    form at the ±3/4 exponent boundaries, and that format_number_with_uncertainty() produces the ± notation expected on 
-    Screen 4 (Section 3.2.2, User Interface).
-    """
     print("Number Formatting Tests")
-
     test_cases = [
-        (0.00123, "Normal decimal (small)"),
-        (0.000123, "Standard form (very small)"),
-        (12345, "Normal decimal (medium)"),
-        (123456, "Standard form (large)"),
-        (5.0912e-2, "Standard form example"),
-        (510.79, "Normal decimal"),
-        (-0.05, "Negative decimal"),
-        (6.1302e-2, "Should be decimal"),
-        (1.7713e-2, "Should be decimal"),
-        (5.167e-2, "Should be decimal"),
-        (0.0001, "Boundary case"),
-        (10000, "Boundary case"),
+        (0.00123, "Normal decimal (small)"), (0.000123, "Standard form (very small)"),
+        (12345, "Normal decimal (medium)"), (123456, "Standard form (large)"),
+        (5.0912e-2, "Standard form example"), (510.79, "Normal decimal"),
+        (-0.05, "Negative decimal"), (6.1302e-2, "Should be decimal"),
+        (1.7713e-2, "Should be decimal"), (5.167e-2, "Should be decimal"),
+        (0.0001, "Boundary case"), (10000, "Boundary case"),
     ]
     for value, description in test_cases:
-        print(f"{value:12.6e} → {format_number(value):20s} # {description}")
-
+        print(f"{value:12.6e} -> {format_number(value):20s} # {description}")
     print("\nWith Uncertainty Tests")
     for value, uncertainty in [(5.0912e-2, 7.594e-4), (510.79, 5.2), (0.00123, 0.00005), (123456, 234)]:
-        print(f"{value:.4e} ± {uncertainty:.4e}")
-        print(f"  → {format_number_with_uncertainty(value, uncertainty)}\n")
+        print(f"{value:.4e} +/- {uncertainty:.4e}")
+        print(f"  -> {format_number_with_uncertainty(value, uncertainty)}\n")

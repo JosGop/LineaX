@@ -1,36 +1,48 @@
-"""
-DataTransform.py
+"""DataTransform.py — Transformation of raw experimental data for linearisation (Algorithm 2).
 
-Handles transformation of raw experimental data for linearisation.
-Implements Algorithm 2 from Section 3.2.2 (Linearise to the form y = mx + c) and the 'Assign apt. x and y values with respect
-to equation' sub-component from Section 3.2.1 (Branch 3 — Linear). Transforms both numerical values and axis titles based
-on the equation type, with correct error propagation throughout. The supported transforms (ln, exp, power, reciprocal, sqrt)
-correspond directly to the examples given in Section 3.2.1: exponential → Y = ln(I), power law → Y = log(y), X = log(x).
+DataTransformer applies axis transformations to an InputData instance and propagates
+measurement uncertainties through each transform using standard error propagation rules
+(Algorithm 6, Section 3.2.2).  The resulting transformed InputData is stored in
+ScreenManager by AnalysisMethodScreen and passed to LinearGraphResultsScreen.
+
+Error propagation formulas implemented here:
+  ln(x)  : Δln(x)     = Δx / x
+  exp(x) : Δexp(x)    = exp(x) · Δx
+  x^n    : Δ(x^n)     = n · x^(n−1) · Δx
+  1/x    : Δ(1/x)     = Δx / x²
+  √x     : Δ√x        = Δx / (2√x)
 """
 
+# numpy provides vectorised array operations used for all numerical transforms.
+# np.log, np.exp, np.power, np.sqrt operate element-wise on entire arrays,
+# avoiding explicit Python loops and matching the error propagation formulas above.
 import numpy as np
+
+# sympy is a symbolic mathematics library; used here only in identify_required_transformations
+# to inspect SymPy expression structure (sp.log, sp.Pow, sp.Mul) and extract transform labels.
 import sympy as sp
+
+# Tuple and Optional support type hints for multi-value returns and nullable parameters.
 from typing import Tuple, Optional, Dict
+
+# InputData is the data container populated by Screen 1 and transformed here.
 from LineaX_Classes import InputData
 
 
 class DataTransformer:
-    """
-    Transforms experimental data based on linearisation requirements.
+    """Transforms experimental data based on linearisation requirements (Algorithm 2 / 6).
 
-    Implements the data transformation step described in the 'Manipulate user values if required' sub-component of Section
-    3.2.1 (Branch 3 — Linear) and Algorithm 2 from Section 3.2.2. Stores transformation metadata in transformation_applied
-    so that axis labels can be updated automatically (e.g., "Force" → "ln(Force)"), as required by Section 3.2.2 (User Interface)
-    and the x_label / y_label variables in the Key Variables table (Section 3.2.2).
-
-    Supported transforms: ln(x), exp(x), x^n, 1/x, sqrt(x), applied to
-    either axis independently, with correct error propagation throughout.
+    Wraps a raw InputData instance and produces a new transformed InputData via
+    transform_for_linearisation().  Each axis is routed through _transform_axis,
+    which dispatches to the appropriate helper (_apply_log_transform etc.) based
+    on the transform label string produced by AnalysisMethodScreen._identify_transforms.
     """
 
     def __init__(self, input_data: InputData):
-        self.raw_data = input_data           # original untransformed InputData from Stage 1
-        self.transformed_data: Optional[InputData] = None      # result of transform_for_linearisation()
-        self.transformation_applied: Optional[Dict] = None     # records what transforms were used
+        # raw_data is the original dataset; stored so revert_to_raw() can recover it.
+        self.raw_data = input_data
+        self.transformed_data: Optional[InputData] = None
+        self.transformation_applied: Optional[Dict] = None
 
     def transform_for_linearisation(
             self,
@@ -39,42 +51,38 @@ class DataTransformer:
             x_var: str = "x",
             y_var: str = "y"
     ) -> InputData:
-        """
-        Apply axis transformations to produce a linearised dataset.
+        """Apply axis transformations and return a linearised InputData instance.
 
-        Core method of Algorithm 2 (Section 3.2.2). Takes transformation strings derived from the selected scientific
-        equation (e.g., "ln(y)" for exponential decay) and delegates to _transform_axis() for each axis. The returned
-        InputData has updated axis titles (e.g., "ln(Intensity)") satisfying the label update requirement in Section 3.2.1
-        (Sub-sub-component: Assign apt. x and y values) and stores a transformation_applied dict for downstream use in
-        GradientAnalysis.py.
-
-        Args:
-            x_transform: Transformation string for x-axis (e.g. "x**2", "1/x", "ln(x)").
-            y_transform: Transformation string for y-axis (e.g. "ln(y)", "y**2").
-            x_var: Variable name used in x transformation strings.
-            y_var: Variable name used in y transformation strings.
-
-        Returns:
-            InputData with transformed values and updated axis titles.
+        Delegates each axis to _transform_axis, then assembles a new InputData with
+        the transformed values, propagated errors and updated axis titles.
+        Called by AnalysisMethodScreen._linearise_equation after Algorithm 2 determines
+        the required transforms.  The result is deposited into ScreenManager for
+        LinearGraphResultsScreen (Section 3.2.1, Data Flow).
         """
         self.transformed_data = InputData()
 
         x_vals, x_err, x_title = self._transform_axis(
-            self.raw_data.x_values, self.raw_data.x_error, self.raw_data.x_title, x_transform, x_var
+            self.raw_data.x_values, self.raw_data.x_error,
+            self.raw_data.x_title, x_transform, x_var
         )
         y_vals, y_err, y_title = self._transform_axis(
-            self.raw_data.y_values, self.raw_data.y_error, self.raw_data.y_title, y_transform, y_var
+            self.raw_data.y_values, self.raw_data.y_error,
+            self.raw_data.y_title, y_transform, y_var
         )
 
-        self.transformed_data.x_values, self.transformed_data.x_error, self.transformed_data.x_title = x_vals, x_err, x_title
-        self.transformed_data.y_values, self.transformed_data.y_error, self.transformed_data.y_title = y_vals, y_err, y_title
+        self.transformed_data.x_values = x_vals
+        self.transformed_data.x_error  = x_err
+        self.transformed_data.x_title  = x_title
+        self.transformed_data.y_values = y_vals
+        self.transformed_data.y_error  = y_err
+        self.transformed_data.y_title  = y_title
 
-        # Record the applied transforms for reference by GradientAnalysis and axis labelling
+        # Record what was applied so get_transformation_info() can report it.
         self.transformation_applied = {
             "x_transform": x_transform or "x",
             "y_transform": y_transform or "y",
             "x_title": x_title,
-            "y_title": y_title
+            "y_title": y_title,
         }
         return self.transformed_data
 
@@ -86,24 +94,22 @@ class DataTransformer:
             transform: Optional[str],
             var_name: str
     ) -> Tuple[np.ndarray, Optional[np.ndarray], str]:
-        """
-        Transform a single axis according to the transform string.
+        """Route a single axis to the appropriate transform helper (Algorithm 6, Section 3.2.2).
 
-        Routes to the appropriate private helper based on the transform string pattern, implementing the conditional logic
-        of Algorithm 2 (Section 3.2.2). Also updates the axis title with the correct mathematical notation (e.g., "ln(Force)")
-        to satisfy the axis label requirement from Section 3.2.1 (Assign apt. x and y values).
-        Error propagation rules follow standard physics uncertainty analysis, as expected by the OCR Physics A-Level
-        specification cited in Section 3.2.2.
-
-        Returns:
-            Tuple of (transformed_values, transformed_errors, new_title).
+        The transform label string (produced by _identify_transforms in AnalysisMethod.py)
+        is lowercased and stripped, then matched against known patterns:
+          'ln(' or 'log(' → logarithmic transform
+          'exp('          → exponential transform
+          'sqrt('         → square root transform
+          '1/'            → reciprocal transform
+          '**' or '^'     → power transform (exponent extracted by _extract_power)
+        Returns the transformed values, propagated errors and the new axis title.
         """
         if transform is None or transform == var_name:
-            return values, errors, original_title  # no transformation needed; pass through unchanged
+            return values, errors, original_title
 
         t = transform.lower().replace(" ", "")
 
-        # Route to the correct transform based on string pattern
         if "ln(" in t or "log(" in t:
             return *self._apply_log_transform(values, errors), f"ln({original_title})"
         if "exp(" in t:
@@ -116,129 +122,119 @@ class DataTransformer:
             power = self._extract_power(t)
             return *self._apply_power_transform(values, errors, power), f"{original_title}^{power}"
 
-        return values, errors, original_title  # unrecognised pattern; leave unchanged
+        return values, errors, original_title
 
-    def _apply_log_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """
-        Apply ln; propagates error as Δln(x) = Δx/x.
+    def _apply_log_transform(self, values, errors):
+        """Apply natural logarithm and propagate error: Δln(x) = Δx / x (Algorithm 6).
 
-        Used for exponential linearisation (e.g., A = A0·exp(-λt) → ln(A) = -λt + ln(A0)) as described in Section 3.2.1
-        (Sub-sub-component: Linearise to y = mx + c) and Algorithm 2 from Section 3.2.2. Raises ValueError for non-positive
-        values, implementing the 'Manipulate user values if required' guard described in Section 3.2.1.
+        np.log computes the natural logarithm element-wise.
+        Raises ValueError if any value is non-positive, since ln(x) is undefined for x ≤ 0.
         """
         if np.any(values <= 0):
             raise ValueError("Cannot take logarithm of non-positive values")
         new_vals = np.log(values)
-        return new_vals, (errors / values if errors is not None else None)  # Δln(x) = Δx / x
+        # Error propagation: derivative of ln(x) is 1/x.
+        return new_vals, (errors / values if errors is not None else None)
 
-    def _apply_exp_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """
-        Apply exp; propagates error as Δexp(x) = exp(x)·Δx.
+    def _apply_exp_transform(self, values, errors):
+        """Apply exponential and propagate error: Δexp(x) = exp(x) · Δx (Algorithm 6).
 
-        Standard chain-rule uncertainty propagation for exponential transform, used when the inverse of a log linearisation
-        is needed. Error propagation follows OCR Physics A uncertainty analysis conventions referenced in Section 3.2.2.
+        np.exp computes e^x element-wise.  The derivative of exp(x) is exp(x) itself,
+        so the propagated error is the product of the transform result and the input error.
         """
         new_vals = np.exp(values)
-        return new_vals, (new_vals * errors if errors is not None else None)  # Δexp(x) = exp(x)·Δx
+        return new_vals, (new_vals * errors if errors is not None else None)
 
-    def _apply_power_transform(self, values: np.ndarray, errors: Optional[np.ndarray], power: float) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """
-        Apply x^n; propagates error as Δ(x^n) = n·x^(n-1)·Δx.
+    def _apply_power_transform(self, values, errors, power: float):
+        """Apply x^n and propagate error: Δ(x^n) = n · x^(n−1) · Δx (Algorithm 6).
 
-        Supports power-law linearisation (e.g., y = A·x^b → y^(1/b) = A^(1/b)·x) from Section 3.2.1. The absolute value
-        in the error term ensures non-negative uncertainties when n < 1, consistent with the validation requirement for
-        positive uncertainties in the Key Variables table (Section 3.2.2).
+        np.power(values, power) raises each element to the given power.
+        np.abs ensures the propagated error is always non-negative regardless of sign.
         """
         new_vals = np.power(values, power)
         new_errs = np.abs(power * np.power(values, power - 1) * errors) if errors is not None else None
         return new_vals, new_errs
 
-    def _apply_reciprocal_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """
-        Apply 1/x; propagates error as Δ(1/x) = Δx/x².
+    def _apply_reciprocal_transform(self, values, errors):
+        """Apply 1/x and propagate error: Δ(1/x) = Δx / x² (Algorithm 6).
 
-        Supports the reciprocal linearisation type (e.g., density ρ = m/V → 1/V = ρ/m), identified in Equations.py for
-        equations tagged linearisation_type="reciprocal". Guards against division by zero before transformation, consistent
-        with Algorithm 2 input validation described in Section 3.2.1 (Manipulate user values if required).
+        Raises ValueError if any value is zero to prevent division by zero.
         """
         if np.any(values == 0):
             raise ValueError("Cannot take reciprocal of zero")
         new_vals = 1.0 / values
-        return new_vals, (errors / (values ** 2) if errors is not None else None)  # Δ(1/x) = Δx / x²
+        # Error propagation: derivative of 1/x is -1/x²; magnitude used for error.
+        return new_vals, (errors / (values ** 2) if errors is not None else None)
 
-    def _apply_sqrt_transform(self, values: np.ndarray, errors: Optional[np.ndarray]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """
-        Apply √x; propagates error as Δ√x = Δx / (2√x).
+    def _apply_sqrt_transform(self, values, errors):
+        """Apply √x and propagate error: Δ√x = Δx / (2√x) (Algorithm 6).
 
-        Supports square-root linearisations for equations such as SUVAT where s ∝ t². Raises ValueError for negative values
-        to prevent NaN propagation, satisfying the finite-value check required before regression in Section 3.2.1 (Ensure
-        consistency with results sub-component).
+        np.sqrt computes the element-wise square root.
+        Raises ValueError for negative inputs since real square roots are undefined there.
         """
         if np.any(values < 0):
             raise ValueError("Cannot take square root of negative values")
         new_vals = np.sqrt(values)
-        return new_vals, (errors / (2 * new_vals) if errors is not None else None)  # Δ√x = Δx / (2√x)
+        # Error propagation: derivative of √x is 1/(2√x).
+        return new_vals, (errors / (2 * new_vals) if errors is not None else None)
 
     def _extract_power(self, transform_str: str) -> float:
-        """
-        Extract the exponent value from a power transform string (x**n or x^n).
+        """Extract the numeric exponent from a power transform string.
 
-        Parses the transform string produced by identify_required_transformations() to obtain the numeric exponent. Falls
-        back to 1.0 if parsing fails, preventing crashes from malformed transform strings as required by the robustness
-        goals in Section 3.1.4 (Solution Requirements).
+        Supports both '**' (Python notation, e.g. 'x**2') and '^' (caret notation).
+        str.split splits on the separator; the second element is the exponent string.
+        strip('()') removes any enclosing parentheses before float conversion.
+        Returns 1.0 as a safe fallback if parsing fails.
         """
         sep = "**" if "**" in transform_str else "^"
         try:
             return float(transform_str.split(sep)[1].strip("()"))
         except (IndexError, ValueError):
-            return 1.0  # safe fallback; leaves values unchanged if exponent cannot be determined
+            return 1.0
 
     def get_transformation_info(self) -> Dict[str, str]:
-        """
-        Return a summary dict of applied transformations.
+        """Return a summary dict of applied transformations.
 
-        Used by graph display modules to populate axis labels and annotation text after linearisation, as required by
-        Section 3.2.2 (annotation_text and x_label/y_label variables in the Key Variables table).
+        Used by GradientAnalysisScreen to populate the 'Selected Equation' section
+        with the transformation labels (x_title, y_title).
         """
         if self.transformation_applied is None:
             return {"status": "No transformation applied", "x_transform": "x", "y_transform": "y"}
         return {"status": "Transformation applied", **self.transformation_applied}
 
     def revert_to_raw(self) -> InputData:
-        """
-        Return the original, untransformed InputData.
+        """Return the original untransformed InputData.
 
-        Supports the 'Fit other Models' sub-component in Section 3.2.1 (Branch 4 — Graphs Options) where users can re-run
-        analysis with a different model while preserving the original dataset. Also used by ScreenManager.get_raw_data()
-        to retrieve the pre-transformation data.
+        Called by AnalysisMethodScreen.revert_to_raw_data() to restore the dataset
+        for re-analysis with a different equation (Section 3.2.1, Branch 4).
         """
         return self.raw_data
 
 
 def identify_required_transformations(linearised_eq: sp.Eq, x_var: str, y_var: str) -> Tuple[str, str]:
-    """
-    Identify axis transformations needed from a linearised SymPy equation.
+    """Identify axis transformations needed from a linearised SymPy equation.
 
-    Companion function to DataTransformer.transform_for_linearisation(). Inspects the structure of a SymPy Eq produced by
-    Algorithm 2 (Section 3.2.2) to determine which transforms were applied to each axis, returning transform strings compatible
-    with _transform_axis(). Supports the 'Ensure consistency with results' sub-component of Section 3.2.1 by enabling
-    cross-validation between the symbolic equation and the numeric transformation.
+    Inspects the LHS of linearised_eq for y-axis transforms:
+      sp.log instance → 'ln(y_var)'
+      sp.Pow instance → 'y_var**n'
+    Inspects the RHS (via sp.preorder_traversal) for x-axis transforms:
+      sp.Pow with base x_sym and exponent -1 → '1/x_var'
+      sp.Pow with other exponent             → 'x_var**n'
 
-    Returns:
-        Tuple of (x_transform, y_transform) as strings.
+    sp.preorder_traversal walks the expression tree depth-first, visiting every
+    sub-expression so nested powers inside products (sp.Mul) are also detected.
     """
     lhs, rhs = linearised_eq.lhs, linearised_eq.rhs
     x_sym = sp.Symbol(x_var)
 
-    # Determine y-axis transform from LHS structure (e.g., ln(y) → "ln(y_var)")
+    # Detect y-axis transform from LHS structure.
     if isinstance(lhs, sp.log):
         y_transform = f"ln({y_var})"
     elif isinstance(lhs, sp.Pow):
         y_transform = f"{y_var}**{lhs.args[1]}"
     else:
-        y_transform = y_var  # no y transformation detected
+        y_transform = y_var
 
-    # Determine x-axis transform by traversing RHS for power or reciprocal terms in x
     x_transform = x_var
     for term in sp.preorder_traversal(rhs):
         if isinstance(term, sp.Pow) and term.args[0] == x_sym:
