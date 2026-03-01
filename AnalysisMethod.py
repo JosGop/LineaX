@@ -855,4 +855,3 @@ if __name__ == "__main__":
     manager = ScreenManager(root)
     manager.show(AnalysisMethodScreen)
     root.mainloop()
-
