@@ -65,6 +65,8 @@ class DataInputScreen(tk.Frame):
         self.input_data = None
         self.create_layout()
 
+
+
     def create_layout(self):
         """Build the top-level layout: header bar, title, two-column panel, bottom buttons.
 

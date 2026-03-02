@@ -166,7 +166,7 @@ class GradientAnalysisScreen(tk.Frame):
         if self.equation_expression:
             tk.Label(inner, text=self.equation_expression, font=("Courier", 11),
                      bg="#e3f2fd", fg="#334155").pack(anchor="w", pady=(4, 2))
-        gradient_desc = f"Where gradient = {self.gradient_variable}" if self.gradient_variable else "Linear regression gradient"
+        gradient_desc = f"Where gradient = {self.gradient_meaning}" if self.gradient_meaning else "Linear regression gradient"
         tk.Label(inner, text=gradient_desc, font=("Segoe UI", 9), bg="#e3f2fd", fg="#64748b").pack(anchor="w", pady=(3, 0))
 
     def create_gradient_section(self, parent):
